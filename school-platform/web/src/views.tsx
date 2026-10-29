@@ -11,23 +11,40 @@ import {
   login,
   openPdf,
   postNotice,
+  todayInSaharanpur,
   uploadDaily,
   uploadPaper,
 } from "./api";
 
-const DEMOS = [
-  ["Teacher, two sections", "meera.sharma@classday.local"],
-  ["Second teacher, same section", "arjun.verma@classday.local"],
-  ["Student who can catch up", "aarav@classday.local"],
-  ["Parent", "parent.aarav@classday.local"],
-  ["School office", "admin.north@classday.local"],
-  ["Other school teacher", "neha.kapoor@classday.local"],
-  ["City desk", "platform@classday.local"],
-] as const;
+export function SchoolCrest({ name, compact = false }: { name: string; compact?: boolean }) {
+  const letters = monogram(name);
+  return (
+    <div className={compact ? "crest-block compact" : "crest-block"}>
+      <svg className="crest" viewBox="0 0 120 120" role="img" aria-label={name}>
+        <circle cx="60" cy="60" r="56" fill="#f7f4ee" stroke="#c6a15b" strokeWidth="3" />
+        <circle cx="60" cy="60" r="48" fill="#16324f" />
+        <circle cx="60" cy="60" r="40" fill="none" stroke="#e6d3a1" strokeWidth="1.25" />
+        <text x="60" y="68" textAnchor="middle" fill="#f7f4ee" fontSize="28" fontFamily="Cormorant Garamond, serif" fontWeight="700">
+          {letters}
+        </text>
+      </svg>
+      <h1 className="crest-name">{name}</h1>
+      {name !== "Saharanpur" ? <p className="crest-place">Saharanpur</p> : <p className="crest-place">ClassDay</p>}
+    </div>
+  );
+}
+
+function monogram(name: string) {
+  const skip = new Set(["school", "public", "the", "of", "and"]);
+  const words = name.split(/\s+/).filter((word) => word && !skip.has(word.toLowerCase()));
+  const source = words.length ? words : [name];
+  if (source.length === 1) return source[0].slice(0, 2).toUpperCase();
+  return source.slice(0, 2).map((word) => word[0].toUpperCase()).join("");
+}
 
 export function Login({ onSuccess }: { onSuccess: (token: string) => void }) {
-  const [email, setEmail] = useState("meera.sharma@classday.local");
-  const [password, setPassword] = useState("demo1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -46,46 +63,81 @@ export function Login({ onSuccess }: { onSuccess: (token: string) => void }) {
   }
 
   return (
-    <div className="login-grid">
-      <form className="card stack" onSubmit={submit}>
-        <p className="brand">Classday</p>
-        <h2>The school day, in one place.</h2>
-        <p className="focus">Two Saharanpur schools. Classes 1 to 12. Five sections each. A teacher files one PDF and leaves.</p>
-        <label>
-          Email
-          <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" />
-        </label>
-        <label>
-          Password
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
-        </label>
-        {error ? <p className="error">{error}</p> : null}
-        <button className="solid" disabled={busy} type="submit">{busy ? "Signing in…" : "Sign in"}</button>
-      </form>
-      <div className="card stack">
-        <h3>Open a demo desk</h3>
-        <p className="muted tiny">Password for every account is demo1234.</p>
-        <div className="demos">
-          {DEMOS.map(([label, account]) => (
-            <button
-              key={account}
-              type="button"
-              onClick={() => {
-                setEmail(account);
-                setPassword("demo1234");
-              }}
-            >
-              <strong>{label}</strong>
-              <div className="tiny muted">{account}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
+    <form className="gate-card stack" onSubmit={submit}>
+      <p className="gate-brand">ClassDay</p>
+      <h1>Sign in</h1>
+      <p className="muted">Use the email and password given by your school.</p>
+      <label>
+        Email
+        <input
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          autoComplete="username"
+          placeholder="name@school.edu"
+          required
+        />
+      </label>
+      <label>
+        Password
+        <input
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          autoComplete="current-password"
+          placeholder="Password"
+          required
+        />
+      </label>
+      {error ? <p className="error">{error}</p> : null}
+      <button className="solid" disabled={busy} type="submit">{busy ? "Signing in…" : "Sign in"}</button>
+    </form>
   );
 }
 
 export function TeacherHome({
+  home,
+  token,
+  date,
+  onDate,
+  onChanged,
+  pane,
+}: {
+  home: Home;
+  token: string;
+  date: string;
+  onDate: (date: string) => void;
+  onChanged: () => void;
+  pane: string;
+}) {
+  const grades = [...new Map(home.teacherCards.map((card) => [card.gradeId, card.classLevel])).entries()];
+  if (pane === "home") {
+    return (
+      <div className="work-grid">
+        <div className="stat-row">
+          <article className="stat"><span>Sections</span><strong>{home.teacherCards.length}</strong></article>
+          <article className="stat"><span>Papers</span><strong>{home.classPapers.length}</strong></article>
+          <article className="stat"><span>Notices</span><strong>{home.notices.length}</strong></article>
+        </div>
+      </div>
+    );
+  }
+  if (pane === "work") {
+    return <WorkDesk home={home} token={token} date={date} onDate={onDate} onChanged={onChanged} />;
+  }
+  if (pane === "papers") {
+    return (
+      <div className="stack">
+        <PaperList papers={home.classPapers} token={token} />
+        <ClassPaperForm grades={grades} token={token} onChanged={onChanged} />
+      </div>
+    );
+  }
+  if (pane === "notices") return <NoticeList notices={home.notices} />;
+  if (pane === "city") return <CityBoard items={home.cityNews} />;
+  return null;
+}
+
+function WorkDesk({
   home,
   token,
   date,
@@ -98,23 +150,93 @@ export function TeacherHome({
   onDate: (date: string) => void;
   onChanged: () => void;
 }) {
-  return (
-    <div className="stack">
-      <section className="card stack">
-        <p className="brand">End of the day</p>
-        <h2>{home.user.schoolName}</h2>
-        <p className="focus">{home.focus}</p>
+  const today = todayInSaharanpur();
+  const [sectionId, setSectionId] = useState<number | "">("");
+  const [subject, setSubject] = useState("");
+  const [draftDate, setDraftDate] = useState(date || today);
+  const [step, setStep] = useState<"pick" | "confirm" | "form">("pick");
+
+  const classes = [...new Map(home.teacherCards.map((card) => [card.sectionId, card.classLabel])).entries()];
+  const subjects = [...new Set(home.teacherCards.filter((card) => card.sectionId === sectionId).map((card) => card.subject))];
+  const card = home.teacherCards.find((item) => item.sectionId === sectionId && item.subject === subject);
+
+  function chooseClass(next: number | "") {
+    setSectionId(next);
+    const nextSubjects = home.teacherCards.filter((item) => item.sectionId === next).map((item) => item.subject);
+    setSubject(nextSubjects.length === 1 ? nextSubjects[0] : "");
+    setStep("pick");
+  }
+
+  function continueFromPicker() {
+    if (sectionId === "" || !subject || !draftDate) return;
+    if (draftDate === today) {
+      onDate(draftDate);
+      setStep("form");
+      return;
+    }
+    setStep("confirm");
+  }
+
+  function openForDate() {
+    if (!draftDate) return;
+    onDate(draftDate);
+    setStep("form");
+  }
+
+  if (step === "form" && card) {
+    return (
+      <div className="stack">
+        <button className="textish" type="button" onClick={() => setStep("pick")}>Back to class and subject</button>
+        <TeacherCardView card={card} token={token} date={draftDate} onChanged={onChanged} />
+      </div>
+    );
+  }
+
+  if (step === "confirm") {
+    return (
+      <section className="card stack picker">
+        <h3>Which date is this work for?</h3>
+        <p className="muted">This is not today. Choose the day, then the form opens for that class only.</p>
         <label>
-          Day
-          <input className="date" type="date" value={date} onChange={(event) => onDate(event.target.value)} />
+          Date
+          <input className="date" type="date" value={draftDate} onChange={(event) => setDraftDate(event.target.value)} />
         </label>
+        <div className="row">
+          <button className="solid" type="button" onClick={openForDate}>Open form</button>
+          <button className="textish" type="button" onClick={() => setStep("pick")}>Back</button>
+        </div>
       </section>
-      {home.teacherCards.map((card) => (
-        <TeacherCardView key={`${card.sectionId}-${card.subject}`} card={card} token={token} date={date} onChanged={onChanged} />
-      ))}
-      <PaperList papers={home.classPapers} token={token} />
-      <ClassPaperForm grades={[...new Map(home.teacherCards.map((card) => [card.gradeId, card.classLevel])).entries()]} token={token} onChanged={onChanged} />
-    </div>
+    );
+  }
+
+  return (
+    <section className="card stack picker">
+      <h3>Class work</h3>
+      <p className="muted">Choose one class and subject. The upload opens only for that choice.</p>
+      <label>
+        Class
+        <select value={sectionId} onChange={(event) => chooseClass(event.target.value ? Number(event.target.value) : "")}>
+          <option value="">Choose a class</option>
+          {classes.map(([id, label]) => (
+            <option key={id} value={id}>{label}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Subject
+        <select value={subject} onChange={(event) => { setSubject(event.target.value); setStep("pick"); }}>
+          <option value="">Choose a subject</option>
+          {subjects.map((name) => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Date
+        <input className="date" type="date" value={draftDate} onChange={(event) => setDraftDate(event.target.value)} />
+      </label>
+      <button className="solid" type="button" disabled={sectionId === "" || !subject} onClick={continueFromPicker}>Continue</button>
+    </section>
   );
 }
 
@@ -211,31 +333,53 @@ function TeacherCardView({
   );
 }
 
-export function FamilyHome({ home, token, date, onDate }: { home: Home; token: string; date: string; onDate: (date: string) => void }) {
-  return (
-    <div className="stack">
-      <section className="card stack">
-        <p className="brand">What happened in class</p>
-        <h2>{home.sectionLabel || home.user.schoolName}</h2>
-        <p className="focus">{home.focus}</p>
-        <label>
+export function FamilyHome({
+  home,
+  token,
+  date,
+  onDate,
+  pane,
+}: {
+  home: Home;
+  token: string;
+  date: string;
+  onDate: (date: string) => void;
+  pane: string;
+}) {
+  const files = (
+    <section className="card stack">
+      <div className="row">
+        <h3>Today's files</h3>
+        <label className="date-label">
           Day
           <input className="date" type="date" value={date} onChange={(event) => onDate(event.target.value)} />
         </label>
-      </section>
-      <section className="card stack">
-        <h3>Today's files</h3>
-        {home.todayWork.length === 0 ? (
-          <p className="muted">Nothing was uploaded for this day. That is a normal day, not a missing assignment.</p>
-        ) : (
-          home.todayWork.map((file) => <DailyRow key={file.id} file={file} token={token} />)
-        )}
-      </section>
-      <PaperList papers={home.classPapers} token={token} />
-      <NoticeList notices={home.notices} />
-      <CityBoard items={home.cityNews} />
-    </div>
+      </div>
+      <p className="tiny muted">{home.sectionLabel || home.user.schoolName}</p>
+      {home.todayWork.length === 0 ? (
+        <p className="muted">Nothing was uploaded for this day.</p>
+      ) : (
+        home.todayWork.map((file) => <DailyRow key={file.id} file={file} token={token} />)
+      )}
+    </section>
   );
+  if (pane === "home") {
+    return (
+      <div className="work-grid">
+        <div className="stat-row">
+          <article className="stat"><span>Files today</span><strong>{home.todayWork.length}</strong></article>
+          <article className="stat"><span>Papers</span><strong>{home.classPapers.length}</strong></article>
+          <article className="stat"><span>Notices</span><strong>{home.notices.length}</strong></article>
+        </div>
+        <div className="span-2">{files}</div>
+      </div>
+    );
+  }
+  if (pane === "work") return files;
+  if (pane === "papers") return <PaperList papers={home.classPapers} token={token} />;
+  if (pane === "notices") return <NoticeList notices={home.notices} />;
+  if (pane === "city") return <CityBoard items={home.cityNews} />;
+  return null;
 }
 
 function DailyRow({ file, token }: { file: DailyFile; token: string }) {
@@ -251,7 +395,14 @@ function DailyRow({ file, token }: { file: DailyFile; token: string }) {
 }
 
 function PaperList({ papers, token }: { papers: PaperFile[]; token: string }) {
-  if (papers.length === 0) return null;
+  if (papers.length === 0) {
+    return (
+      <section className="card">
+        <h3>Papers</h3>
+        <p className="muted">No paper has been sent to this class.</p>
+      </section>
+    );
+  }
   return (
     <section className="card stack">
       <h3>Sample papers for the whole class</h3>
@@ -269,28 +420,55 @@ function PaperList({ papers, token }: { papers: PaperFile[]; token: string }) {
   );
 }
 
-export function AdminHome({ home, token, onChanged }: { home: Home; token: string; onChanged: () => void }) {
-  return (
-    <div className="stack">
-      <section className="card stack">
-        <p className="brand">School office</p>
-        <h2>{home.user.schoolName}</h2>
-        <p className="focus">{home.focus}</p>
-        <p className="tiny muted">Classes 1–12, sections A–E. Most sections have no students yet. The demo student is in Class 8-A at North Ridge, and Class 10-A at Riverbank.</p>
-      </section>
+export function AdminHome({ home, token, onChanged, pane }: { home: Home; token: string; onChanged: () => void; pane: string }) {
+  const grades = home.grades.map((grade) => [grade.gradeId, grade.level] as [number, number]);
+  if (pane === "home") {
+    const withFiles = home.grades.reduce((sum, grade) => sum + grade.sections.filter((section) => section.filesToday > 0).length, 0);
+    return (
+      <div className="work-grid">
+        <div className="stat-row">
+          <article className="stat"><span>Classes</span><strong>{home.grades.length}</strong></article>
+          <article className="stat"><span>Sections with a file</span><strong>{withFiles}</strong></article>
+          <article className="stat"><span>Notices</span><strong>{home.notices.length}</strong></article>
+        </div>
+        <section className="card span-2">
+          <h3>Classes</h3>
+          <p className="tiny muted">Classes 1–12, sections A–E.</p>
+          {home.grades.map((grade) => (
+            <GradeDetails key={grade.gradeId} grade={grade} />
+          ))}
+        </section>
+      </div>
+    );
+  }
+  if (pane === "classes") {
+    return (
       <section className="card">
         <h3>Classes</h3>
         {home.grades.map((grade) => (
           <GradeDetails key={grade.gradeId} grade={grade} />
         ))}
       </section>
-      <NoticeComposer home={home} token={token} onChanged={onChanged} />
-      <ClassPaperForm grades={home.grades.map((grade) => [grade.gradeId, grade.level] as [number, number])} token={token} onChanged={onChanged} />
-      <PaperList papers={home.classPapers} token={token} />
-      <NoticeList notices={home.notices} showReceipts />
-      <CityBoard items={home.cityNews} />
-    </div>
-  );
+    );
+  }
+  if (pane === "papers") {
+    return (
+      <div className="stack">
+        <PaperList papers={home.classPapers} token={token} />
+        <ClassPaperForm grades={grades} token={token} onChanged={onChanged} />
+      </div>
+    );
+  }
+  if (pane === "notices") {
+    return (
+      <div className="stack">
+        <NoticeComposer home={home} token={token} onChanged={onChanged} />
+        <NoticeList notices={home.notices} showReceipts />
+      </div>
+    );
+  }
+  if (pane === "city") return <CityBoard items={home.cityNews} />;
+  return null;
 }
 
 function GradeDetails({ grade }: { grade: GradeBlock }) {
@@ -444,7 +622,7 @@ function ClassPaperForm({
   );
 }
 
-export function PlatformHome({ home, token, onChanged }: { home: Home; token: string; onChanged: () => void }) {
+export function PlatformHome({ home, token, onChanged, pane }: { home: Home; token: string; onChanged: () => void; pane: string }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [error, setError] = useState("");
@@ -462,43 +640,54 @@ export function PlatformHome({ home, token, onChanged }: { home: Home; token: st
     }
   }
 
-  return (
-    <div className="stack">
-      <section className="card stack">
-        <p className="brand">Saharanpur</p>
-        <h2>Both schools, one system.</h2>
-        <p className="focus">{home.focus}</p>
-      </section>
-      <div className="login-grid">
-        {home.schools.map((school) => (
-          <article className="card stack" key={school.id}>
-            <h3>{school.name}</h3>
-            <p>{school.classes} classes · {school.sections} sections</p>
-            <p className="tiny muted">Plan {school.plan}. Students and files stay inside this school.</p>
-          </article>
-        ))}
-      </div>
-      <CityBoard items={home.cityNews} />
-      <NoticeList notices={home.notices} showReceipts />
-      <form className="card stack" onSubmit={submit}>
-        <h3>Inter-school event</h3>
-        <label>
-          Title
-          <input value={title} onChange={(event) => setTitle(event.target.value)} />
-        </label>
-        <label>
-          Message
-          <textarea value={body} onChange={(event) => setBody(event.target.value)} />
-        </label>
-        {error ? <p className="error">{error}</p> : null}
-        <button className="solid" type="submit">Post to every school</button>
-      </form>
+  const schools = (
+    <div className="work-grid">
+      {home.schools.map((school) => (
+        <article className="card stack" key={school.id}>
+          <h3>{school.name}</h3>
+          <p>{school.classes} classes · {school.sections} sections</p>
+          <p className="tiny muted">{school.plan}</p>
+        </article>
+      ))}
     </div>
   );
+  const eventForm = (
+    <form className="card stack" onSubmit={submit}>
+      <h3>Inter-school event</h3>
+      <label>
+        Title
+        <input value={title} onChange={(event) => setTitle(event.target.value)} />
+      </label>
+      <label>
+        Message
+        <textarea value={body} onChange={(event) => setBody(event.target.value)} />
+      </label>
+      {error ? <p className="error">{error}</p> : null}
+      <button className="solid" type="submit">Post to every school</button>
+    </form>
+  );
+  if (pane === "home" || pane === "schools") return schools;
+  if (pane === "notices") {
+    return (
+      <div className="stack">
+        {eventForm}
+        <NoticeList notices={home.notices} showReceipts />
+      </div>
+    );
+  }
+  if (pane === "city") return <CityBoard items={home.cityNews} />;
+  return null;
 }
 
 function NoticeList({ notices, showReceipts = false }: { notices: Notice[]; showReceipts?: boolean }) {
-  if (notices.length === 0) return null;
+  if (notices.length === 0) {
+    return (
+      <section className="card">
+        <h3>Notices</h3>
+        <p className="muted">No notices today.</p>
+      </section>
+    );
+  }
   return (
     <section className="card stack">
       <h3>Notices</h3>
@@ -516,6 +705,31 @@ function NoticeList({ notices, showReceipts = false }: { notices: Notice[]; show
   );
 }
 
+export function NewsRail({ items }: { items: NewsItem[] }) {
+  return (
+    <aside className="news-rail">
+      <h2>Saharanpur</h2>
+      <p className="tiny muted">Last 24 hours</p>
+      {items.length === 0 ? <p className="muted">No headlines in the last day.</p> : null}
+      {items.map((item) => (
+        <article className="headline" key={item.id}>
+          <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.title.replace(/^Sample:\s*/i, "")}</a>
+          <span className="tiny muted">{item.sourceName} · {clock(item.publishedAt)}</span>
+        </article>
+      ))}
+    </aside>
+  );
+}
+
+export function LaterDesk({ title }: { title: string }) {
+  return (
+    <section className="card stack">
+      <h2>{title}</h2>
+      <p className="muted">This section is not open for the school yet.</p>
+    </section>
+  );
+}
+
 function CityBoard({ items }: { items: NewsItem[] }) {
   return (
     <section className="card stack news">
@@ -523,7 +737,7 @@ function CityBoard({ items }: { items: NewsItem[] }) {
       {items.length === 0 ? <p className="muted">Nothing new in the last day.</p> : null}
       {items.map((item) => (
         <article key={item.id}>
-          <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.title}</a>
+          <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.title.replace(/^Sample:\s*/i, "")}</a>
           <div className="tiny muted">{item.sourceName} · {clock(item.publishedAt)}</div>
           <p>{item.summary}</p>
         </article>

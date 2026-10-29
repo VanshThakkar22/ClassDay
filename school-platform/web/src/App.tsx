@@ -1,6 +1,55 @@
 import { useEffect, useState } from "react";
 import { Home, loadHome, todayInSaharanpur } from "./api";
-import { AdminHome, FamilyHome, Login, PlatformHome, TeacherHome } from "./views";
+import { AdminHome, FamilyHome, LaterDesk, Login, NewsRail, PlatformHome, SchoolCrest, TeacherHome } from "./views";
+
+function roleLabel(role: string | undefined) {
+  if (role === "TEACHER") return "Teacher";
+  if (role === "STUDENT") return "Student";
+  if (role === "PARENT") return "Parent";
+  if (role === "SCHOOL_ADMIN") return "School office";
+  if (role === "PLATFORM_ADMIN") return "City office";
+  return "";
+}
+
+const LATER: Record<string, string> = {
+  attendance: "Attendance",
+  exams: "Exams",
+  fees: "Fees",
+};
+
+function navFor(role: string | undefined) {
+  const later = [
+    { id: "attendance", label: "Attendance" },
+    { id: "exams", label: "Exams" },
+    { id: "fees", label: "Fees" },
+  ];
+  if (role === "PLATFORM_ADMIN") {
+    return [
+      { id: "home", label: "Home" },
+      { id: "schools", label: "Schools" },
+      { id: "notices", label: "Notices" },
+      { id: "city", label: "City" },
+    ];
+  }
+  if (role === "SCHOOL_ADMIN") {
+    return [
+      { id: "home", label: "Home" },
+      { id: "classes", label: "Classes" },
+      { id: "papers", label: "Papers" },
+      { id: "notices", label: "Notices" },
+      { id: "city", label: "City" },
+      ...later,
+    ];
+  }
+  return [
+    { id: "home", label: "Home" },
+    { id: "work", label: "Class work" },
+    { id: "papers", label: "Papers" },
+    { id: "notices", label: "Notices" },
+    { id: "city", label: "City" },
+    ...later,
+  ];
+}
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem("classday-token"));
@@ -8,16 +57,19 @@ export default function App() {
   const [date, setDate] = useState(todayInSaharanpur());
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
+  const [pane, setPane] = useState("home");
 
   function signIn(next: string) {
     localStorage.setItem("classday-token", next);
     setToken(next);
+    setPane("home");
   }
 
   function signOut() {
     localStorage.removeItem("classday-token");
     setToken(null);
     setHome(null);
+    setPane("home");
   }
 
   useEffect(() => {
@@ -43,42 +95,54 @@ export default function App() {
 
   if (!token) {
     return (
-      <main className="app">
+      <main className="gate-page">
         <Login onSuccess={signIn} />
       </main>
     );
   }
 
   const role = home?.user.role;
+  const schoolName = home?.user.schoolName || "ClassDay";
+  const links = navFor(role);
+  const changed = () => setRevision((value) => value + 1);
   return (
-    <main className="app stack">
-      <header className="top">
-        <div>
-          <p className="brand">Classday</p>
-          <p className="tiny muted">Saharanpur prototype</p>
-        </div>
+    <div className="desk">
+      <header className="topbar">
+        <p className="gate-brand">ClassDay</p>
+        {home ? <SchoolCrest name={schoolName} compact /> : <div />}
         <div className="who">
-          <strong>{home?.user.fullName ?? "…"}</strong>
-          <span className="tiny muted">{home?.user.schoolName}</span>
-          <div>
-            <button className="textish" type="button" onClick={signOut}>Sign out</button>
-          </div>
+          <strong>{home?.user.fullName ?? "Signing in"}</strong>
+          <span className="tiny muted">{roleLabel(role)}</span>
+          <button className="textish" type="button" onClick={signOut}>Sign out</button>
         </div>
       </header>
-      {error ? <p className="error">{error}</p> : null}
-      {!home ? <p>Loading the school day…</p> : null}
-      {home && role === "TEACHER" ? (
-        <TeacherHome home={home} token={token} date={date} onDate={setDate} onChanged={() => setRevision((value) => value + 1)} />
-      ) : null}
-      {home && (role === "STUDENT" || role === "PARENT") ? (
-        <FamilyHome home={home} token={token} date={date} onDate={setDate} />
-      ) : null}
-      {home && role === "SCHOOL_ADMIN" ? (
-        <AdminHome home={home} token={token} onChanged={() => setRevision((value) => value + 1)} />
-      ) : null}
-      {home && role === "PLATFORM_ADMIN" ? (
-        <PlatformHome home={home} token={token} onChanged={() => setRevision((value) => value + 1)} />
-      ) : null}
-    </main>
+      <nav className="nav">
+        {links.map((link) => (
+          <button key={link.id} type="button" className={pane === link.id ? "on" : ""} onClick={() => setPane(link.id)}>
+            {link.label}
+          </button>
+        ))}
+      </nav>
+      <div className="workspace">
+        <div className="stage">
+          {error ? <p className="error">{error}</p> : null}
+          {!home ? <p>Loading the school day…</p> : null}
+          {LATER[pane] ? <LaterDesk title={LATER[pane]} /> : null}
+          {home && !LATER[pane] && role === "TEACHER" ? (
+            <TeacherHome home={home} token={token} date={date} onDate={setDate} onChanged={changed} pane={pane} />
+          ) : null}
+          {home && !LATER[pane] && (role === "STUDENT" || role === "PARENT") ? (
+            <FamilyHome home={home} token={token} date={date} onDate={setDate} pane={pane} />
+          ) : null}
+          {home && !LATER[pane] && role === "SCHOOL_ADMIN" ? (
+            <AdminHome home={home} token={token} onChanged={changed} pane={pane} />
+          ) : null}
+          {home && !LATER[pane] && role === "PLATFORM_ADMIN" ? (
+            <PlatformHome home={home} token={token} onChanged={changed} pane={pane} />
+          ) : null}
+        </div>
+        {home ? <NewsRail items={home.cityNews} /> : null}
+      </div>
+    </div>
   );
 }
