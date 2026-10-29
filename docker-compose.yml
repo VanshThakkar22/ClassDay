@@ -1,0 +1,68 @@
+name: openbell
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: openbell
+      MYSQL_USER: openbell
+      MYSQL_PASSWORD: openbell
+      MYSQL_ROOT_PASSWORD: openbell-root
+      TZ: Asia/Kolkata
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -popenbell-root --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 25s
+
+  api:
+    build: ./api
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/openbell?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USER: openbell
+      DB_PASSWORD: openbell
+      JWT_SECRET: dev-only-change-me-before-any-real-school-data-0123456789
+      FILE_DIR: /data/files
+      TZ: Asia/Kolkata
+    volumes:
+      - uploads:/data/files
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 40s
+
+  ingest:
+    build: ./ingest
+    environment:
+      DB_HOST: mysql
+      DB_NAME: openbell
+      DB_USER: openbell
+      DB_PASSWORD: openbell
+      TZ: Asia/Kolkata
+    depends_on:
+      api:
+        condition: service_healthy
+
+  web:
+    build: ./web
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  uploads:

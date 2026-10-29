@@ -1,0 +1,9 @@
+backend/target/
+backend/uploads/
+web/node_modules/
+web/dist/
+news-ingest/.venv/
+news-ingest/__pycache__/
+*.class
+.idea/
+.vscode/
