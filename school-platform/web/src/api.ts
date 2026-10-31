@@ -153,6 +153,14 @@ export async function uploadPaper(token: string, gradeId: number, title: string,
   if (!response.ok) throw new Error(await readError(response));
 }
 
+export async function deleteNotice(token: string, id: number): Promise<void> {
+  const response = await fetch(`/api/notices/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}
+
 export async function postNotice(
   token: string,
   payload: { scope: string; sectionId?: number; gradeId?: number; title: string; body: string },

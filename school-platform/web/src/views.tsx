@@ -10,6 +10,7 @@ import {
   clock,
   login,
   openPdf,
+  deleteNotice,
   postNotice,
   todayInSaharanpur,
   uploadDaily,
@@ -463,7 +464,12 @@ export function AdminHome({ home, token, onChanged, pane }: { home: Home; token:
     return (
       <div className="stack">
         <NoticeComposer home={home} token={token} onChanged={onChanged} />
-        <NoticeList notices={home.notices} showReceipts />
+        <NoticeList
+          notices={home.notices}
+          showReceipts
+          canDelete={(notice) => notice.scope !== "CITY"}
+          onDelete={(id) => removeNotice(token, id, onChanged)}
+        />
       </div>
     );
   }
@@ -479,7 +485,7 @@ function GradeDetails({ grade }: { grade: GradeBlock }) {
       {grade.sections.map((section) => (
         <div className="section-line" key={section.sectionId}>
           <strong>{section.name}</strong>
-          <span>{section.teachers.length ? section.teachers.join(", ") : "No teacher yet"}{section.studentCount ? ` · ${section.studentCount} student` : ""}</span>
+          <span>{section.teachers.length ? section.teachers.join(", ") : "No teacher yet"}{section.studentCount ? ` · ${section.studentCount} ${section.studentCount === 1 ? "student" : "students"}` : ""}</span>
           <span className="muted">{section.filesToday ? `${section.filesToday} PDF` : "Nothing shared"}</span>
         </div>
       ))}
@@ -671,7 +677,12 @@ export function PlatformHome({ home, token, onChanged, pane }: { home: Home; tok
     return (
       <div className="stack">
         {eventForm}
-        <NoticeList notices={home.notices} showReceipts />
+        <NoticeList
+          notices={home.notices}
+          showReceipts
+          canDelete={(notice) => notice.scope === "CITY"}
+          onDelete={(id) => removeNotice(token, id, onChanged)}
+        />
       </div>
     );
   }
@@ -679,7 +690,27 @@ export function PlatformHome({ home, token, onChanged, pane }: { home: Home; tok
   return null;
 }
 
-function NoticeList({ notices, showReceipts = false }: { notices: Notice[]; showReceipts?: boolean }) {
+async function removeNotice(token: string, id: number, onChanged: () => void) {
+  if (!window.confirm("Delete this notice? It will disappear for everyone who can see it.")) return;
+  try {
+    await deleteNotice(token, id);
+    onChanged();
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : "Could not delete this notice.");
+  }
+}
+
+function NoticeList({
+  notices,
+  showReceipts = false,
+  canDelete,
+  onDelete,
+}: {
+  notices: Notice[];
+  showReceipts?: boolean;
+  canDelete?: (notice: Notice) => boolean;
+  onDelete?: (id: number) => void;
+}) {
   if (notices.length === 0) {
     return (
       <section className="card">
@@ -698,6 +729,9 @@ function NoticeList({ notices, showReceipts = false }: { notices: Notice[]; show
           <p>{notice.body}</p>
           {showReceipts && notice.audienceCount !== null ? (
             <p className="tiny muted">Seen by {notice.seenCount} of {notice.audienceCount} students and parents</p>
+          ) : null}
+          {canDelete?.(notice) && onDelete ? (
+            <button className="textish" type="button" onClick={() => onDelete(notice.id)}>Delete</button>
           ) : null}
         </article>
       ))}

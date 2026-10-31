@@ -262,6 +262,28 @@ public class SchoolService {
   }
 
   @Transactional
+  public void deleteNotice(UserAccount current, Long id) {
+    UserAccount user = fresh(current);
+    Notice notice = notices.findById(id).orElseThrow(() -> new IllegalArgumentException("Notice not found."));
+    if (user.getRole() == Enums.Role.PLATFORM_ADMIN) {
+      if (notice.getScope() != Enums.Scope.CITY) {
+        throw new ForbiddenException("The city desk can delete a city notice only.");
+      }
+    } else if (user.getRole() == Enums.Role.SCHOOL_ADMIN) {
+      if (notice.getScope() == Enums.Scope.CITY
+          || notice.getSchool() == null
+          || user.getSchool() == null
+          || !user.getSchool().getId().equals(notice.getSchool().getId())) {
+        throw new ForbiddenException("The school office can delete a notice from this school only.");
+      }
+    } else {
+      throw new ForbiddenException("Only the school office or the city desk can delete a notice.");
+    }
+    receipts.deleteByNoticeId(notice.getId());
+    notices.delete(notice);
+  }
+
+  @Transactional
   public Dto.NewsItem ingest(String key, Dto.CityNewsRequest request) {
     if (key == null || !key.equals(properties.getIngestKey())) {
       throw new ForbiddenException("The news ingest key does not match.");
@@ -368,11 +390,14 @@ public class SchoolService {
     for (Grade grade : grades.findBySchoolIdOrderByLevelAsc(schoolId)) {
       List<Dto.SectionLine> lines = new ArrayList<>();
       for (Section section : sections.findByGradeIdOrderByNameAsc(grade.getId())) {
-        List<String> teacherNames =
-            assignments.findBySectionId(section.getId()).stream()
-                .map(item -> item.getTeacher().getFullName() + " · " + item.getSubject())
-                .sorted()
-                .toList();
+        List<String> teacherNames = new ArrayList<>();
+        if (section.getClassTeacher() != null) {
+          teacherNames.add(section.getClassTeacher().getFullName() + " · Class teacher");
+        }
+        assignments.findBySectionId(section.getId()).stream()
+            .map(item -> item.getTeacher().getFullName() + " · " + item.getSubject())
+            .sorted()
+            .forEach(teacherNames::add);
         int filesToday = dailyWork.findBySectionIdAndWorkDateOrderBySubjectAsc(section.getId(), date).size();
         int studentCount = students.findBySectionId(section.getId()).size();
         lines.add(new Dto.SectionLine(section.getId(), section.getName(), teacherNames, filesToday, studentCount));

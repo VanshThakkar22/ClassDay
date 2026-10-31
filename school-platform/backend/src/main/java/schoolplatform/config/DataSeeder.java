@@ -3,6 +3,7 @@ package schoolplatform.config;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,11 +87,17 @@ public class DataSeeder implements ApplicationRunner {
   @Override
   @Transactional
   public void run(ApplicationArguments args) {
-    if (users.countByEmail("platform@classday.local") > 0) {
-      return;
+    if (users.countByEmail("platform@classday.local") == 0) {
+      seedSchools();
     }
-    School north = school("North Ridge School");
-    School river = school("Riverbank Public School");
+    if (users.countByEmail("Student1C1SA@Rainbow") == 0) {
+      seedRoster();
+    }
+  }
+
+  private void seedSchools() {
+    School north = school("Rainbow School");
+    School river = school("Pinewood School");
     Map<String, Section> sectionByKey = new HashMap<>();
     Map<String, Grade> gradeByKey = new HashMap<>();
     for (School school : List.of(north, river)) {
@@ -111,8 +118,8 @@ public class DataSeeder implements ApplicationRunner {
     }
 
     user("platform@classday.local", "Platform desk", Enums.Role.PLATFORM_ADMIN, null);
-    user("admin.north@classday.local", "North Ridge office", Enums.Role.SCHOOL_ADMIN, north);
-    user("admin.river@classday.local", "Riverbank office", Enums.Role.SCHOOL_ADMIN, river);
+    user("admin.rainbow@classday.local", "Rainbow School office", Enums.Role.SCHOOL_ADMIN, north);
+    user("admin.pinewood@classday.local", "Pinewood School office", Enums.Role.SCHOOL_ADMIN, river);
     UserAccount meera = user("meera.sharma@classday.local", "Meera Sharma", Enums.Role.TEACHER, north);
     UserAccount arjun = user("arjun.verma@classday.local", "Arjun Verma", Enums.Role.TEACHER, north);
     UserAccount neha = user("neha.kapoor@classday.local", "Neha Kapoor", Enums.Role.TEACHER, river);
@@ -126,8 +133,8 @@ public class DataSeeder implements ApplicationRunner {
     teach(arjun, sectionByKey.get(key(north, 8) + "-A"), "English");
     teach(neha, sectionByKey.get(key(river, 10) + "-A"), "Science");
 
-    enroll(aarav, sectionByKey.get(key(north, 8) + "-A"), "NR-8A-01");
-    enroll(diya, sectionByKey.get(key(river, 10) + "-A"), "RB-10A-01");
+    enroll(aarav, sectionByKey.get(key(north, 8) + "-A"), "RA-8A-01");
+    enroll(diya, sectionByKey.get(key(river, 10) + "-A"), "PW-10A-01");
     link(aaravParent, aarav);
     link(diyaParent, diya);
 
@@ -160,7 +167,7 @@ public class DataSeeder implements ApplicationRunner {
 
     Notice schoolNotice = new Notice();
     schoolNotice.setSchool(north);
-    schoolNotice.setAuthor(users.findByEmail("admin.north@classday.local").orElseThrow());
+    schoolNotice.setAuthor(users.findByEmail("admin.rainbow@classday.local").orElseThrow());
     schoolNotice.setScope(Enums.Scope.SCHOOL);
     schoolNotice.setTitle("Friday PTM for Classes 6 to 8");
     schoolNotice.setBody("The meeting is at 10:00 in the hall. This notice is the record. No reply is needed.");
@@ -180,6 +187,33 @@ public class DataSeeder implements ApplicationRunner {
     news("Old item that should stay off the 24 hour board", Instant.now().minus(36, ChronoUnit.HOURS));
   }
 
+  private void seedRoster() {
+    String passwordHash = passwords.encode("demo1234");
+    List<School> ordered = schools.findAll().stream().sorted(Comparator.comparing(School::getId)).toList();
+    for (int index = 0; index < ordered.size(); index++) {
+      School school = ordered.get(index);
+      int schoolNo = index + 1;
+      String schoolTag = schoolNo == 1 ? "Rainbow" : "Pinewood";
+      for (Grade grade : grades.findBySchoolIdOrderByLevelAsc(school.getId())) {
+        for (Section section : sections.findByGradeIdOrderByNameAsc(grade.getId())) {
+          String place = "C" + grade.getLevel() + "S" + section.getName();
+          String teacherId = "Teacher" + place;
+          UserAccount classTeacher = account(teacherId + "@" + schoolTag, teacherId, Enums.Role.TEACHER, school, passwordHash);
+          section.setClassTeacher(classTeacher);
+          sections.save(section);
+          for (int number = 1; number <= 5; number++) {
+            String studentId = "Student" + number + place;
+            UserAccount student = account(studentId + "@" + schoolTag, studentId, Enums.Role.STUDENT, school, passwordHash);
+            enroll(student, section, studentId);
+            String parentId = "Parent" + number + place;
+            UserAccount parent = account(parentId + "@" + schoolTag, parentId, Enums.Role.PARENT, school, passwordHash);
+            link(parent, student);
+          }
+        }
+      }
+    }
+  }
+
   private School school(String name) {
     School school = new School();
     school.setName(name);
@@ -189,12 +223,16 @@ public class DataSeeder implements ApplicationRunner {
   }
 
   private UserAccount user(String email, String name, Enums.Role role, School school) {
+    return account(email, name, role, school, passwords.encode("demo1234"));
+  }
+
+  private UserAccount account(String email, String name, Enums.Role role, School school, String passwordHash) {
     UserAccount user = new UserAccount();
     user.setEmail(email);
     user.setFullName(name);
     user.setRole(role);
     user.setSchool(school);
-    user.setPasswordHash(passwords.encode("demo1234"));
+    user.setPasswordHash(passwordHash);
     return users.save(user);
   }
 

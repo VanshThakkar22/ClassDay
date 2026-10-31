@@ -20,6 +20,10 @@ public class Section {
   @JoinColumn(name = "grade_id")
   private Grade grade;
 
+  @ManyToOne
+  @JoinColumn(name = "class_teacher_id")
+  private UserAccount classTeacher;
+
   private String name;
 
   public Long getId() {
@@ -40,5 +44,13 @@ public class Section {
 
   public void setName(String name) {
     this.name = name;
+  }
+
+  public UserAccount getClassTeacher() {
+    return classTeacher;
+  }
+
+  public void setClassTeacher(UserAccount classTeacher) {
+    this.classTeacher = classTeacher;
   }
 }

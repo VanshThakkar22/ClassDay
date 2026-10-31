@@ -41,11 +41,12 @@ Password for every demo account is `demo1234`.
 | English teacher, same Class 8-A | arjun.verma@classday.local |
 | Student in Class 8-A | aarav@classday.local |
 | That student's parent | parent.aarav@classday.local |
-| North Ridge office | admin.north@classday.local |
-| Science teacher, Riverbank Class 10-A | neha.kapoor@classday.local |
+| Rainbow School office | admin.rainbow@classday.local |
+| Pinewood School office | admin.pinewood@classday.local |
+| Science teacher, Pinewood Class 10-A | neha.kapoor@classday.local |
 | City desk | platform@classday.local |
 
-Meera's mathematics PDF for today is already there. Arjun's English slot is empty, which is a valid day. Class 8 has one sample paper for every section. Riverbank Class 10 has one too. Diya (`diya@classday.local`) is the student who sees that paper and an empty day.
+Meera's mathematics PDF for today is already there. Arjun's English slot is empty, which is a valid day. Class 8 has one sample paper for every section. Pinewood Class 10 has one too. Diya (`diya@classday.local`) is the student who sees that paper and an empty day.
 
 To add a city headline from Python:
 
