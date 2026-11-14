@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import {
   DailyFile,
+  FeeBoard,
+  FeeLine,
   GradeBlock,
   Home,
   NewsItem,
@@ -8,10 +10,13 @@ import {
   PaperFile,
   TeacherCard,
   clock,
+  loadFees,
   login,
   openPdf,
   deleteNotice,
   postNotice,
+  remindFees,
+  saveFee,
   todayInSaharanpur,
   uploadDaily,
   uploadPaper,
@@ -725,7 +730,7 @@ function NoticeList({
       {notices.map((notice) => (
         <article key={notice.id}>
           <strong>{notice.title}</strong>
-          <div className="tiny muted">{notice.targetLabel} · {notice.scope}</div>
+          <div className="tiny muted">{notice.targetLabel} · {notice.scope === "FEE" ? "Fee reminder" : notice.scope}</div>
           <p>{notice.body}</p>
           {showReceipts && notice.audienceCount !== null ? (
             <p className="tiny muted">Seen by {notice.seenCount} of {notice.audienceCount} students and parents</p>
@@ -752,6 +757,289 @@ export function NewsRail({ items }: { items: NewsItem[] }) {
         </article>
       ))}
     </aside>
+  );
+}
+
+function rs(amount: number) {
+  return "₹" + amount.toLocaleString("en-IN");
+}
+
+function owed(line: FeeLine) {
+  return line.schoolFee + line.busFee + line.otherFee;
+}
+
+function byClass(lines: FeeLine[]) {
+  const groups: { label: string; lines: FeeLine[] }[] = [];
+  for (const line of lines) {
+    const last = groups[groups.length - 1];
+    if (last?.label === line.classLabel) last.lines.push(line);
+    else groups.push({ label: line.classLabel, lines: [line] });
+  }
+  return groups;
+}
+
+function classTotal(group: { lines: FeeLine[] }) {
+  return group.lines.reduce((sum, line) => sum + owed(line), 0);
+}
+
+function classRank(label: string) {
+  const match = /^Class (\d+)-(.+)$/.exec(label);
+  return match ? Number(match[1]) * 100 + match[2].charCodeAt(0) : 0;
+}
+
+function sortSections(groups: { label: string; lines: FeeLine[] }[], sort: "class" | "high" | "low") {
+  return [...groups].sort((a, b) => {
+    const byClass = classRank(a.label) - classRank(b.label);
+    if (sort === "class") return byClass;
+    const diff = classTotal(a) - classTotal(b);
+    if (diff === 0) return byClass;
+    return sort === "high" ? -diff : diff;
+  });
+}
+
+export function FeesDesk({ token, onChanged }: { token: string; onChanged: () => void }) {
+  const [board, setBoard] = useState<FeeBoard | null>(null);
+  const [draft, setDraft] = useState<Record<number, FeeLine>>({});
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [sort, setSort] = useState<"class" | "high" | "low">("class");
+  const [picked, setPicked] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadFees(token)
+      .then((next) => {
+        if (cancelled) return;
+        setBoard(next);
+        setDraft(Object.fromEntries(next.lines.map((line) => [line.studentId, line])));
+        setError("");
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load fees");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  function patch(studentId: number, next: Partial<FeeLine>) {
+    setDraft((current) => ({ ...current, [studentId]: { ...current[studentId], ...next } }));
+  }
+
+  async function save(event: FormEvent, studentId: number) {
+    event.preventDefault();
+    const line = draft[studentId];
+    setError("");
+    setMessage("");
+    try {
+      const saved = await saveFee(token, line);
+      setBoard((current) => {
+        if (!current) return current;
+        const lines = current.lines.map((item) => (item.studentId === saved.studentId ? saved : item));
+        return { ...current, lines, canRemind: lines.some((item) => owed(item) > 0) };
+      });
+      setDraft((current) => ({ ...current, [saved.studentId]: saved }));
+      setMessage(`Saved for ${saved.studentName}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save");
+    }
+  }
+
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    try {
+      const sent = await remindFees(token, title, body);
+      setTitle("");
+      setBody("");
+      setMessage(`Sent to ${sent} ${sent === 1 ? "student" : "students"} and their parents.`);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send");
+    }
+  }
+
+  if (!board) return error ? <p className="error">{error}</p> : <p>Loading fees…</p>;
+  const groups = byClass(board.lines);
+  const office = !board.canEdit && groups.length > 1;
+  const lead = board.canEdit
+    ? "Choose a student, then enter what is still unpaid. Set a box to 0 when it is paid. The other fee needs a reason."
+    : office
+      ? "Every class section is here. Sort by the total still left. A reminder goes only to students whose total is still pending, and to their parents."
+      : board.canRemind
+        ? "Pending fees for each class. A reminder goes only to students who still owe, and to their parents."
+        : board.note || "What is still unpaid.";
+
+  return (
+    <div className="stack">
+      <section className="card stack">
+        <h2>Fees</h2>
+        <p className="muted">{lead}</p>
+        {error ? <p className="error">{error}</p> : null}
+        {message ? <p className="ok">{message}</p> : null}
+        {board.canEdit && !board.canRemind ? (
+          <p className="tiny muted">Save a pending amount, then you can remind that student and their parent.</p>
+        ) : null}
+        {office && !board.canRemind ? (
+          <p className="tiny muted">Nobody has a total left, so a reminder is not sent.</p>
+        ) : null}
+        {board.canRemind ? (
+          <form className="stack" onSubmit={send}>
+            <h3>Remind students who still owe</h3>
+            <p className="tiny muted">
+              {office
+                ? "Sent only to students whose total is still pending, and to their parents. Each notice adds that student's amount."
+                : "They receive your words, then their own pending amount. The message uses the amounts already saved."}
+            </p>
+            <label>
+              Title
+              <input value={title} onChange={(event) => setTitle(event.target.value)} required />
+            </label>
+            <label>
+              Message
+              <textarea value={body} onChange={(event) => setBody(event.target.value)} required />
+            </label>
+            <button className="solid" type="submit">Send reminder</button>
+          </form>
+        ) : null}
+      </section>
+      {office ? (
+        <section className="card stack">
+          <div className="row between">
+            <h3>Class sections</h3>
+            <label className="fee-sort">
+              Sort
+              <select value={sort} onChange={(event) => setSort(event.target.value as "class" | "high" | "low")}>
+                <option value="class">Class order</option>
+                <option value="high">Highest pending</option>
+                <option value="low">Lowest pending</option>
+              </select>
+            </label>
+          </div>
+          {sortSections(groups, sort).map((group) => {
+            const total = classTotal(group);
+            const owing = group.lines.filter((line) => owed(line) > 0);
+            return (
+              <details key={group.label}>
+                <summary>
+                  {group.label} · {rs(total)} still left
+                  {owing.length ? ` · ${owing.length} ${owing.length === 1 ? "student" : "students"}` : ""}
+                </summary>
+                {owing.length === 0 ? <p className="muted">Nothing pending in this section.</p> : <div className="fee-people">{owing.map((line) => <FeeRead key={line.studentId} line={line} />)}</div>}
+              </details>
+            );
+          })}
+        </section>
+      ) : board.canEdit ? (
+        groups.map((group) => {
+          const chosen = draft[picked ?? -1];
+          const here = chosen && group.lines.some((line) => line.studentId === chosen.studentId);
+          return (
+            <section className="card stack" key={group.label}>
+              <div className="row between">
+                <h3>{group.label}</h3>
+                <button className="ghost" type="button" onClick={() => downloadFees(group.lines)}>Download Excel</button>
+              </div>
+              <p className="tiny muted">{rs(classTotal(group))} still left</p>
+              <div className="fee-people">
+                {group.lines.map((line) => (
+                  <article key={line.studentId} className={picked === line.studentId ? "fee-person on" : "fee-person"}>
+                    <button type="button" className="fee-line" onClick={() => setPicked(line.studentId)}>
+                      <strong>{line.studentName}</strong><span>{rs(owed(draft[line.studentId] ?? line))}</span>
+                    </button>
+                  </article>
+                ))}
+              </div>
+              {here && chosen ? (
+                <FeeEditor line={chosen} onChange={(next) => patch(chosen.studentId, next)} onSave={(event) => save(event, chosen.studentId)} />
+              ) : (
+                <p className="muted">Select a student to update their fees.</p>
+              )}
+            </section>
+          );
+        })
+      ) : (
+        groups.map((group) => (
+          <section className="card stack" key={group.label}>
+            <h3>{group.label}</h3>
+            <p className="tiny muted">{rs(classTotal(group))} still left</p>
+            {group.lines.map((line) => <FeeRead key={line.studentId} line={line} />)}
+          </section>
+        ))
+      )}
+    </div>
+  );
+}
+
+function downloadFees(lines: FeeLine[]) {
+  const cell = (value: string | number) => {
+    const text = String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const type = typeof value === "number" ? "Number" : "String";
+    return `<Cell><Data ss:Type="${type}">${text}</Data></Cell>`;
+  };
+  const rows = [["Name", "School Fee", "Bus Fee", "Other Fee", "Reason of other fee", "Total Fee"], ...lines.filter((line) => owed(line) > 0).map((line) => [line.studentName, line.schoolFee, line.busFee, line.otherFee, line.otherReason, owed(line)])];
+  const xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Fees"><Table>${rows.map((row) => `<Row>${row.map(cell).join("")}</Row>`).join("")}</Table></Worksheet></Workbook>`;
+  const url = URL.createObjectURL(new Blob([xml], { type: "application/vnd.ms-excel" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "pending-fees.xls";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function FeeEditor({
+  line,
+  onChange,
+  onSave,
+}: {
+  line: FeeLine;
+  onChange: (next: Partial<FeeLine>) => void;
+  onSave: (event: FormEvent) => void;
+}) {
+  function amount(key: "schoolFee" | "busFee" | "otherFee", raw: string) {
+    const value = Number(raw);
+    onChange({ [key]: Number.isFinite(value) && value > 0 ? Math.min(1_000_000, Math.round(value)) : 0 });
+  }
+  return (
+    <form className="fee-row" onSubmit={onSave}>
+      <strong>{line.studentName}</strong>
+      <div className="fee-grid">
+        <label>
+          School fee
+          <input type="number" min={0} value={line.schoolFee} onChange={(event) => amount("schoolFee", event.target.value)} />
+        </label>
+        <label>
+          Bus fee
+          <input type="number" min={0} value={line.busFee} onChange={(event) => amount("busFee", event.target.value)} />
+        </label>
+        <label>
+          Other fee
+          <input type="number" min={0} value={line.otherFee} onChange={(event) => amount("otherFee", event.target.value)} />
+        </label>
+        <label>
+          Other fee is for
+          <input value={line.otherReason} placeholder="Trip, annual day, program" onChange={(event) => onChange({ otherReason: event.target.value })} />
+        </label>
+        <button className="solid" type="submit">Save</button>
+      </div>
+    </form>
+  );
+}
+
+function FeeRead({ line }: { line: FeeLine }) {
+  const [open, setOpen] = useState(false);
+  const total = owed(line);
+  if (!total) return <p className="muted">{line.studentName}: nothing is pending.</p>;
+  return (
+    <article className="fee-person">
+      <button type="button" className="fee-line" onClick={() => setOpen((value) => !value)}>
+        <strong>{line.studentName}</strong><span>{rs(total)}</span>
+      </button>
+      {open ? <p>School {rs(line.schoolFee)} · Bus {rs(line.busFee)} · Other{line.otherReason ? ` (${line.otherReason})` : ""} {rs(line.otherFee)}</p> : null}
+    </article>
   );
 }
 

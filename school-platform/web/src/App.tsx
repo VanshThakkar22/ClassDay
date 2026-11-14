@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Home, loadHome, todayInSaharanpur } from "./api";
-import { AdminHome, FamilyHome, LaterDesk, Login, NewsRail, PlatformHome, SchoolCrest, TeacherHome } from "./views";
+import { AdminHome, FamilyHome, FeesDesk, LaterDesk, Login, NewsRail, PlatformHome, SchoolCrest, TeacherHome } from "./views";
 
 function roleLabel(role: string | undefined) {
   if (role === "TEACHER") return "Teacher";
@@ -14,7 +14,6 @@ function roleLabel(role: string | undefined) {
 const LATER: Record<string, string> = {
   attendance: "Attendance",
   exams: "Exams",
-  fees: "Fees",
 };
 
 function navFor(role: string | undefined) {
@@ -128,6 +127,7 @@ export default function App() {
           {error ? <p className="error">{error}</p> : null}
           {!home ? <p>Loading the school day…</p> : null}
           {LATER[pane] ? <LaterDesk title={LATER[pane]} /> : null}
+          {home && pane === "fees" ? <FeesDesk token={token} onChanged={changed} /> : null}
           {home && !LATER[pane] && role === "TEACHER" ? (
             <TeacherHome home={home} token={token} date={date} onDate={setDate} onChanged={changed} pane={pane} />
           ) : null}

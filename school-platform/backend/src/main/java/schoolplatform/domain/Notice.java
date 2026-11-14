@@ -38,6 +38,10 @@ public class Notice {
   @JoinColumn(name = "grade_id")
   private Grade grade;
 
+  @ManyToOne
+  @JoinColumn(name = "student_id")
+  private UserAccount student;
+
   private String title;
 
   @Column(length = 2000)
@@ -87,6 +91,14 @@ public class Notice {
 
   public void setGrade(Grade grade) {
     this.grade = grade;
+  }
+
+  public UserAccount getStudent() {
+    return student;
+  }
+
+  public void setStudent(UserAccount student) {
+    this.student = student;
   }
 
   public String getTitle() {

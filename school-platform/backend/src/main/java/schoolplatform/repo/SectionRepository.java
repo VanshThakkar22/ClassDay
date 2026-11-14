@@ -7,5 +7,7 @@ import schoolplatform.domain.Section;
 public interface SectionRepository extends JpaRepository<Section, Long> {
   List<Section> findByGradeIdOrderByNameAsc(Long gradeId);
 
+  List<Section> findByClassTeacher_Id(Long teacherId);
+
   List<Section> findByGrade_School_Id(Long schoolId);
 }

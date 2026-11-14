@@ -234,6 +234,9 @@ public class SchoolService {
     notice.setBody(limit(required(request.body(), "Message"), 2000, "Message"));
     notice.setCreatedAt(Instant.now());
 
+    if (scope == Enums.Scope.FEE) {
+      throw new IllegalArgumentException("Fee reminders are sent from the Fees page.");
+    }
     if (scope == Enums.Scope.CITY) {
       if (user.getRole() != Enums.Role.PLATFORM_ADMIN) {
         throw new ForbiddenException("City events are posted from the platform desk.");
@@ -281,6 +284,91 @@ public class SchoolService {
     }
     receipts.deleteByNoticeId(notice.getId());
     notices.delete(notice);
+  }
+
+  @Transactional(readOnly = true)
+  public Dto.FeeBoard fees(UserAccount current) {
+    UserAccount user = fresh(current);
+    if (user.getRole() == Enums.Role.TEACHER) {
+      if (sections.findByClassTeacher_Id(user.getId()).isEmpty()) {
+        return new Dto.FeeBoard(List.of(), false, false, "Only the class teacher of a section can enter fees.");
+      }
+      List<StudentProfile> profiles = classStudents(user);
+      if (profiles.isEmpty()) {
+        return new Dto.FeeBoard(List.of(), false, false, "Your class has no students yet.");
+      }
+      return feeBoard(profiles, true);
+    }
+    if (user.getRole() == Enums.Role.SCHOOL_ADMIN) {
+      List<StudentProfile> all = feeProfiles(user);
+      if (all.isEmpty()) {
+        return new Dto.FeeBoard(List.of(), false, false, "This school has no students yet.");
+      }
+      return feeBoard(all, false);
+    }
+    if (user.getRole() == Enums.Role.STUDENT || user.getRole() == Enums.Role.PARENT) {
+      List<StudentProfile> kids = childrenOf(user);
+      if (kids.isEmpty()) {
+        return new Dto.FeeBoard(List.of(), false, false, "No student is linked to this login.");
+      }
+      return new Dto.FeeBoard(feeLines(kids), false, false, "");
+    }
+    throw new ForbiddenException("Fees stay inside a school.");
+  }
+
+  @Transactional
+  public Dto.FeeLine saveFee(UserAccount current, Long studentId, Dto.FeeSave request) {
+    UserAccount user = fresh(current);
+    if (user.getRole() != Enums.Role.TEACHER) {
+      throw new ForbiddenException("Only the class teacher can change fees.");
+    }
+    StudentProfile profile =
+        students.findByUserId(studentId).orElseThrow(() -> new IllegalArgumentException("Student not found."));
+    UserAccount teacher = profile.getSection().getClassTeacher();
+    if (teacher == null || !teacher.getId().equals(user.getId())) {
+      throw new ForbiddenException("You can enter fees only for your own class.");
+    }
+    int other = rupees(request.otherFee(), "Other fee");
+    String reason = request.otherReason() == null ? "" : request.otherReason().trim();
+    if (other > 0 && reason.isEmpty()) {
+      throw new IllegalArgumentException("Say what the other fee is for.");
+    }
+    profile.setSchoolFee(rupees(request.schoolFee(), "School fee"));
+    profile.setBusFee(rupees(request.busFee(), "Bus fee"));
+    profile.setOtherFee(other);
+    profile.setOtherReason(other == 0 ? "" : limit(reason, 120, "The reason"));
+    return feeLine(students.save(profile));
+  }
+
+  @Transactional
+  public int remindFees(UserAccount current, Dto.FeeRemind request) {
+    UserAccount user = fresh(current);
+    if (user.getRole() != Enums.Role.TEACHER && user.getRole() != Enums.Role.SCHOOL_ADMIN) {
+      throw new ForbiddenException("Only a class teacher or the school office can send a fee reminder.");
+    }
+    if (user.getRole() == Enums.Role.TEACHER && sections.findByClassTeacher_Id(user.getId()).isEmpty()) {
+      throw new ForbiddenException("Only the class teacher of a section can send a fee reminder.");
+    }
+    List<StudentProfile> owing = feeProfiles(user).stream().filter(profile -> pending(profile) > 0).toList();
+    if (owing.isEmpty()) {
+      throw new IllegalArgumentException("Nobody has fees left.");
+    }
+    String title = limit(required(request.title(), "Title"), 140, "Title");
+    String message = limit(required(request.body(), "Message"), 1600, "Message");
+    for (StudentProfile profile : owing) {
+      Notice notice = new Notice();
+      notice.setAuthor(user);
+      notice.setSchool(profile.getUser().getSchool());
+      notice.setScope(Enums.Scope.FEE);
+      notice.setStudent(profile.getUser());
+      notice.setSection(profile.getSection());
+      notice.setGrade(profile.getSection().getGrade());
+      notice.setTitle(title);
+      notice.setBody(limit(message + "\n\n" + pendingText(profile), 2000, "Message"));
+      notice.setCreatedAt(Instant.now());
+      notices.save(notice);
+    }
+    return owing.size();
   }
 
   @Transactional
@@ -446,6 +534,11 @@ public class SchoolService {
   }
 
   private boolean canSee(UserAccount user, Notice notice) {
+    if (notice.getScope() == Enums.Scope.FEE) {
+      Long studentId = notice.getStudent() == null ? null : notice.getStudent().getId();
+      return studentId != null
+          && childrenOf(user).stream().anyMatch(profile -> profile.getUser().getId().equals(studentId));
+    }
     if (notice.getScope() == Enums.Scope.CITY) {
       return true;
     }
@@ -564,6 +657,9 @@ public class SchoolService {
   }
 
   private int audienceCount(Notice notice) {
+    if (notice.getScope() == Enums.Scope.FEE) {
+      return 1 + guardians.findByStudentIdIn(List.of(notice.getStudent().getId())).size();
+    }
     if (notice.getScope() == Enums.Scope.CITY) {
       return users.findByRoleIn(List.of(Enums.Role.PARENT, Enums.Role.STUDENT)).size();
     }
@@ -600,6 +696,9 @@ public class SchoolService {
   }
 
   private String targetLabel(Notice notice) {
+    if (notice.getScope() == Enums.Scope.FEE && notice.getStudent() != null) {
+      return notice.getStudent().getFullName();
+    }
     if (notice.getScope() == Enums.Scope.CITY) {
       return "All schools in " + CITY;
     }
@@ -654,6 +753,73 @@ public class SchoolService {
 
   private UserAccount fresh(UserAccount current) {
     return users.findById(current.getId()).orElseThrow(() -> new ForbiddenException("Sign in required."));
+  }
+
+  private List<StudentProfile> classStudents(UserAccount teacher) {
+    List<Long> ids = sections.findByClassTeacher_Id(teacher.getId()).stream().map(Section::getId).toList();
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+    return students.findBySectionIdIn(ids);
+  }
+
+  private List<StudentProfile> feeProfiles(UserAccount user) {
+    if (user.getRole() == Enums.Role.TEACHER) {
+      return classStudents(user);
+    }
+    return students.findByUser_School_Id(user.getSchool().getId());
+  }
+
+  private Dto.FeeBoard feeBoard(List<StudentProfile> profiles, boolean canEdit) {
+    List<Dto.FeeLine> lines = feeLines(profiles);
+    boolean owing = lines.stream().anyMatch(line -> line.schoolFee() + line.busFee() + line.otherFee() > 0);
+    return new Dto.FeeBoard(lines, canEdit, owing, "");
+  }
+
+  private List<Dto.FeeLine> feeLines(List<StudentProfile> profiles) {
+    return profiles.stream()
+        .sorted(
+            Comparator.comparing((StudentProfile profile) -> profile.getSection().getGrade().getLevel())
+                .thenComparing(profile -> profile.getSection().getName())
+                .thenComparing(profile -> profile.getUser().getFullName(), String.CASE_INSENSITIVE_ORDER))
+        .map(this::feeLine)
+        .toList();
+  }
+
+  private Dto.FeeLine feeLine(StudentProfile profile) {
+    return new Dto.FeeLine(
+        profile.getUser().getId(),
+        profile.getUser().getFullName(),
+        classLabel(profile.getSection()),
+        profile.getSchoolFee(),
+        profile.getBusFee(),
+        profile.getOtherFee(),
+        profile.getOtherReason());
+  }
+
+  private static int pending(StudentProfile profile) {
+    return profile.getSchoolFee() + profile.getBusFee() + profile.getOtherFee();
+  }
+
+  private static String pendingText(StudentProfile profile) {
+    String text = "Pending fees:";
+    if (profile.getSchoolFee() > 0) {
+      text += "\nSchool fee: ₹" + profile.getSchoolFee();
+    }
+    if (profile.getBusFee() > 0) {
+      text += "\nBus fee: ₹" + profile.getBusFee();
+    }
+    if (profile.getOtherFee() > 0) {
+      text += "\nOther (" + profile.getOtherReason() + "): ₹" + profile.getOtherFee();
+    }
+    return text + "\nTotal pending: ₹" + pending(profile);
+  }
+
+  private static int rupees(int value, String label) {
+    if (value < 0 || value > 1_000_000) {
+      throw new IllegalArgumentException(label + " must be from 0 to 1000000.");
+    }
+    return value;
   }
 
   private static String classLabel(Section section) {

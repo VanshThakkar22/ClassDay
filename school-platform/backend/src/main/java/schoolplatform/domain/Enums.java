@@ -21,6 +21,7 @@ public final class Enums {
     SECTION,
     GRADE,
     SCHOOL,
-    CITY
+    CITY,
+    FEE
   }
 }

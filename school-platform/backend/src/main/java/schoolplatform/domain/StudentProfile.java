@@ -26,6 +26,14 @@ public class StudentProfile {
 
   private String admissionNo;
 
+  private Integer schoolFee;
+
+  private Integer busFee;
+
+  private Integer otherFee;
+
+  private String otherReason;
+
   public Long getId() {
     return id;
   }
@@ -52,5 +60,37 @@ public class StudentProfile {
 
   public void setAdmissionNo(String admissionNo) {
     this.admissionNo = admissionNo;
+  }
+
+  public int getSchoolFee() {
+    return schoolFee == null ? 0 : schoolFee;
+  }
+
+  public void setSchoolFee(int schoolFee) {
+    this.schoolFee = schoolFee;
+  }
+
+  public int getBusFee() {
+    return busFee == null ? 0 : busFee;
+  }
+
+  public void setBusFee(int busFee) {
+    this.busFee = busFee;
+  }
+
+  public int getOtherFee() {
+    return otherFee == null ? 0 : otherFee;
+  }
+
+  public void setOtherFee(int otherFee) {
+    this.otherFee = otherFee;
+  }
+
+  public String getOtherReason() {
+    return otherReason == null ? "" : otherReason;
+  }
+
+  public void setOtherReason(String otherReason) {
+    this.otherReason = otherReason;
   }
 }

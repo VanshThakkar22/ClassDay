@@ -12,6 +12,7 @@ spring:
     open-in-view: false
     properties:
       hibernate.jdbc.time_zone: Asia/Kolkata
+      hibernate.type.preferred_enum_jdbc_type: VARCHAR
   jackson:
     serialization:
       write-dates-as-timestamps: false

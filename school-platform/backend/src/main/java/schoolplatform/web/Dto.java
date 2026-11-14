@@ -63,6 +63,21 @@ public final class Dto {
 
   public record NoticeRequest(String scope, Long sectionId, Long gradeId, String title, String body) {}
 
+  public record FeeLine(
+      Long studentId,
+      String studentName,
+      String classLabel,
+      int schoolFee,
+      int busFee,
+      int otherFee,
+      String otherReason) {}
+
+  public record FeeBoard(List<FeeLine> lines, boolean canEdit, boolean canRemind, String note) {}
+
+  public record FeeSave(int schoolFee, int busFee, int otherFee, String otherReason) {}
+
+  public record FeeRemind(String title, String body) {}
+
   public record CityNewsRequest(
       String city,
       String title,

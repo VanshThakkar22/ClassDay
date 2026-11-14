@@ -391,6 +391,36 @@ summary { cursor: pointer; font-weight: 560; }
 
 .between { justify-content: space-between; }
 
+.fee-sort { width: 190px; }
+.fee-sort select { width: 100%; }
+
+.fee-people { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
+.fee-person {
+  flex: 1 1 180px;
+  max-width: 100%;
+  border: 1px solid #e3e7ee;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fbfcfd;
+}
+.fee-line { display: flex; justify-content: space-between; gap: 10px; width: 100%; border: 0; background: transparent; padding: 0; text-align: left; }
+.fee-person.on { border-color: #16324f; background: #f7f4ee; }
+.fee-person p { margin: 8px 0 0; }
+
+.fee-row {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #efe7db;
+  padding-top: 12px;
+}
+
+.fee-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(90px, 130px)) minmax(140px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
 .modal-back {
   position: fixed;
   inset: 0;
@@ -413,7 +443,7 @@ summary { cursor: pointer; font-weight: 560; }
 }
 
 @media (max-width: 900px) {
-  .login-grid, .top, .file-line, .section-line, .mast-row, .topbar, .workspace, .work-grid, .stat-row {
+  .login-grid, .top, .file-line, .section-line, .mast-row, .topbar, .workspace, .work-grid, .stat-row, .fee-grid {
     display: grid;
     grid-template-columns: 1fr;
   }
