@@ -24,7 +24,10 @@ public final class Dto {
       List<GradeBlock> grades,
       List<SchoolCard> schools,
       List<NewsItem> cityNews,
-      String sectionLabel) {}
+      String sectionLabel,
+      List<Staff> teachers) {}
+
+  public record Staff(Long id, String fullName) {}
 
   public record TeacherCard(
       Long sectionId,
@@ -39,7 +42,7 @@ public final class Dto {
       Long id, String subject, String teacherName, String fileName, String note, String uploadedAt) {}
 
   public record PaperFile(
-      Long id, String title, String fileName, String classLabel, String uploadedBy, String createdAt) {}
+      Long id, String title, String fileName, String classLabel, String uploadedBy, String createdAt, Long uploadedById) {}
 
   public record NoticeView(
       Long id,
@@ -49,12 +52,27 @@ public final class Dto {
       String targetLabel,
       String createdAt,
       Integer seenCount,
-      Integer audienceCount) {}
+      Integer audienceCount,
+      Long authorId) {}
 
   public record GradeBlock(Long gradeId, int level, List<SectionLine> sections) {}
 
   public record SectionLine(
-      Long sectionId, String name, List<String> teachers, int filesToday, int studentCount) {}
+      Long sectionId,
+      String name,
+      List<String> teachers,
+      int filesToday,
+      int studentCount,
+      Long classTeacherId,
+      List<Duty> duties,
+      String classTeacherName,
+      List<UploadLine> uploads) {}
+
+  public record Duty(Long id, Long teacherId, String teacherName, String subject) {}
+
+  public record UploadLine(String subject, String teacherName) {}
+
+  public record AssignRequest(Long sectionId, Long teacherId, String subject, boolean classTeacher) {}
 
   public record SchoolCard(Long id, String name, String plan, int classes, int sections) {}
 

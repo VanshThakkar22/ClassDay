@@ -172,6 +172,8 @@ p { margin: 0; }
   border-radius: 14px;
   padding: 14px 16px;
 }
+button.stat { text-align: left; width: 100%; }
+button.stat.tip { border-bottom: 0; }
 
 .stat span {
   font-size: 13px;
@@ -306,12 +308,20 @@ p { margin: 0; }
 }
 
 label { display: grid; gap: 6px; font-size: 14px; }
+label.check { display: flex; align-items: center; gap: 8px; }
 input, select, textarea {
   width: 100%;
   border: 1px solid #d5dbe3;
   background: #fbfcfd;
   border-radius: 12px;
   padding: 12px 13px;
+}
+label.check input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  padding: 0;
+  border-radius: 4px;
 }
 
 input:focus, select:focus, textarea:focus {
@@ -369,6 +379,26 @@ summary { cursor: pointer; font-weight: 560; }
   font-size: 14px;
 }
 
+.tip { position: relative; border-bottom: 1px dotted #8a94a3; cursor: default; }
+.tip-box {
+  display: none;
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 180px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e3e7ee;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(22, 50, 79, 0.12);
+  color: #16324f;
+  font-size: 13px;
+}
+.tip.end .tip-box { left: auto; right: 0; }
+.tip:hover .tip-box, .tip.on .tip-box { display: grid; gap: 4px; }
+.tip-box span { white-space: nowrap; }
+
 .date {
   width: auto;
 }
@@ -389,7 +419,7 @@ summary { cursor: pointer; font-weight: 560; }
   gap: 2px;
 }
 
-.between { justify-content: space-between; }
+.between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 
 .fee-sort { width: 190px; }
 .fee-sort select { width: 100%; }

@@ -34,6 +34,17 @@ public class FileStorageService {
     return new FileSystemResource(storedPath);
   }
 
+  public void delete(String storedPath) {
+    if (storedPath == null || storedPath.isBlank()) {
+      return;
+    }
+    try {
+      Files.deleteIfExists(Path.of(storedPath));
+    } catch (IOException ex) {
+      throw new IllegalStateException("Could not remove the PDF.");
+    }
+  }
+
   private String write(String originalName, byte[] bytes) {
     try {
       Files.createDirectories(root);

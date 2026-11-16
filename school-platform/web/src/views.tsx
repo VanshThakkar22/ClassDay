@@ -9,11 +9,14 @@ import {
   Notice,
   PaperFile,
   TeacherCard,
+  assignTeacher,
   clock,
   loadFees,
   login,
+  removeAssignment,
   openPdf,
   deleteNotice,
+  deletePaper,
   postNotice,
   remindFees,
   saveFee,
@@ -116,13 +119,23 @@ export function TeacherHome({
   pane: string;
 }) {
   const grades = [...new Map(home.teacherCards.map((card) => [card.gradeId, card.classLevel])).entries()];
+  const [sectionsOpen, setSectionsOpen] = useState(false);
   if (pane === "home") {
     return (
       <div className="work-grid">
         <div className="stat-row">
-          <article className="stat"><span>Sections</span><strong>{home.teacherCards.length}</strong></article>
-          <article className="stat"><span>Papers</span><strong>{home.classPapers.length}</strong></article>
-          <article className="stat"><span>Notices</span><strong>{home.notices.length}</strong></article>
+          <button type="button" className={sectionsOpen ? "stat tip on" : "stat tip"} onClick={() => setSectionsOpen((open) => !open)}>
+            <span>Sections</span>
+            <strong>{home.teacherCards.length}</strong>
+            <span className="tip-box">
+              {home.teacherCards.length === 0
+                ? <span>No section yet</span>
+                : home.teacherCards.map((card) => (
+                    <span key={`${card.sectionId}-${card.subject}`}>{card.classLabel} · {card.subject}</span>
+                  ))}
+            </span>
+          </button>
+          <article className="stat"><span>Notices</span><strong>{schoolNotices(home.notices).length}</strong></article>
         </div>
       </div>
     );
@@ -133,14 +146,27 @@ export function TeacherHome({
   if (pane === "papers") {
     return (
       <div className="stack">
-        <PaperList papers={home.classPapers} token={token} />
+        <PaperList
+          papers={home.classPapers}
+          token={token}
+          canDelete={(paper) => paper.uploadedById === home.user.id}
+          onDelete={(id) => removePaper(token, id, onChanged)}
+        />
         <ClassPaperForm grades={grades} token={token} onChanged={onChanged} />
       </div>
     );
   }
-  if (pane === "notices") return <NoticeList notices={home.notices} />;
-  if (pane === "city") return <CityBoard items={home.cityNews} />;
+  if (pane === "notices") return <NoticeList notices={schoolNotices(home.notices)} />;
+  if (pane === "city") return <CityBoard notices={cityNotices(home.notices)} />;
   return null;
+}
+
+function schoolNotices(notices: Notice[]) {
+  return notices.filter((notice) => notice.scope !== "CITY");
+}
+
+function cityNotices(notices: Notice[]) {
+  return notices.filter((notice) => notice.scope === "CITY");
 }
 
 function WorkDesk({
@@ -375,7 +401,7 @@ export function FamilyHome({
         <div className="stat-row">
           <article className="stat"><span>Files today</span><strong>{home.todayWork.length}</strong></article>
           <article className="stat"><span>Papers</span><strong>{home.classPapers.length}</strong></article>
-          <article className="stat"><span>Notices</span><strong>{home.notices.length}</strong></article>
+          <article className="stat"><span>Notices</span><strong>{schoolNotices(home.notices).length}</strong></article>
         </div>
         <div className="span-2">{files}</div>
       </div>
@@ -383,8 +409,8 @@ export function FamilyHome({
   }
   if (pane === "work") return files;
   if (pane === "papers") return <PaperList papers={home.classPapers} token={token} />;
-  if (pane === "notices") return <NoticeList notices={home.notices} />;
-  if (pane === "city") return <CityBoard items={home.cityNews} />;
+  if (pane === "notices") return <NoticeList notices={schoolNotices(home.notices)} />;
+  if (pane === "city") return <CityBoard notices={cityNotices(home.notices)} />;
   return null;
 }
 
@@ -400,7 +426,17 @@ function DailyRow({ file, token }: { file: DailyFile; token: string }) {
   );
 }
 
-function PaperList({ papers, token }: { papers: PaperFile[]; token: string }) {
+function PaperList({
+  papers,
+  token,
+  canDelete,
+  onDelete,
+}: {
+  papers: PaperFile[];
+  token: string;
+  canDelete?: (paper: PaperFile) => boolean;
+  onDelete?: (id: number) => void;
+}) {
   if (papers.length === 0) {
     return (
       <section className="card">
@@ -419,23 +455,120 @@ function PaperList({ papers, token }: { papers: PaperFile[]; token: string }) {
             <strong>{paper.title}</strong>
             <div className="tiny muted">{paper.classLabel} · {paper.uploadedBy}</div>
           </div>
-          <button className="ghost" type="button" onClick={() => openPdf(token, `/api/files/papers/${paper.id}`)}>Open PDF</button>
+          <div className="row">
+            <button className="ghost" type="button" onClick={() => openPdf(token, `/api/files/papers/${paper.id}`)}>Open PDF</button>
+            {canDelete?.(paper) && onDelete ? (
+              <button className="textish" type="button" onClick={() => onDelete(paper.id)}>Delete</button>
+            ) : null}
+          </div>
         </div>
       ))}
     </section>
   );
 }
 
+function AssignDesk({ home, token, onChanged }: { home: Home; token: string; onChanged: () => void }) {
+  const sections = home.grades.flatMap((grade) =>
+    grade.sections.map((section) => ({ ...section, label: `Class ${grade.level} · ${section.name}` })),
+  );
+  const [sectionId, setSectionId] = useState<number | "">("");
+  const [teacherId, setTeacherId] = useState<number | "">("");
+  const [subject, setSubject] = useState("");
+  const [classTeacher, setClassTeacher] = useState(false);
+  const [error, setError] = useState("");
+  const picked = sections.find((section) => section.sectionId === sectionId);
+
+  function pickSection(next: number | "") {
+    setSectionId(next);
+    const section = sections.find((item) => item.sectionId === next);
+    setClassTeacher(teacherId !== "" && section?.classTeacherId === teacherId);
+  }
+
+  function pickTeacher(next: number | "") {
+    setTeacherId(next);
+    setClassTeacher(next !== "" && picked?.classTeacherId === next);
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (sectionId === "" || teacherId === "" || !subject.trim()) {
+      setError("Choose the section, the teacher, and a subject.");
+      return;
+    }
+    setError("");
+    try {
+      await assignTeacher(token, { sectionId, teacherId, subject: subject.trim(), classTeacher });
+      setSubject("");
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save");
+    }
+  }
+
+  async function drop(id: number) {
+    setError("");
+    try {
+      await removeAssignment(token, id);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove");
+    }
+  }
+
+  return (
+    <form className="card stack" onSubmit={submit}>
+      <h3>Assign a teacher</h3>
+      <p className="muted">Choose the section, the subject they teach, and whether they are its class teacher.</p>
+      <label>
+        Section
+        <select value={sectionId} onChange={(event) => pickSection(event.target.value ? Number(event.target.value) : "")}>
+          <option value="">Choose a section</option>
+          {sections.map((section) => (
+            <option key={section.sectionId} value={section.sectionId}>{section.label}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Teacher
+        <select value={teacherId} onChange={(event) => pickTeacher(event.target.value ? Number(event.target.value) : "")}>
+          <option value="">Choose a teacher</option>
+          {(home.teachers ?? []).map((teacher) => (
+            <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Subject
+        <input value={subject} onChange={(event) => setSubject(event.target.value)} />
+      </label>
+      <label className="check">
+        Class teacher of this section
+        <input type="checkbox" checked={classTeacher} onChange={(event) => setClassTeacher(event.target.checked)} />
+      </label>
+      {picked?.duties?.length ? (
+        <div>
+          {picked.duties.map((duty) => (
+            <p className="row between" key={duty.id}>
+              <span>{duty.teacherName} · {duty.subject}{picked.classTeacherId === duty.teacherId ? " · Class teacher" : ""}</span>
+              <button className="textish" type="button" onClick={() => drop(duty.id)}>Remove</button>
+            </p>
+          ))}
+        </div>
+      ) : null}
+      {error ? <p className="error">{error}</p> : null}
+      <button className="solid" type="submit">Save</button>
+    </form>
+  );
+}
+
 export function AdminHome({ home, token, onChanged, pane }: { home: Home; token: string; onChanged: () => void; pane: string }) {
   const grades = home.grades.map((grade) => [grade.gradeId, grade.level] as [number, number]);
   if (pane === "home") {
-    const withFiles = home.grades.reduce((sum, grade) => sum + grade.sections.filter((section) => section.filesToday > 0).length, 0);
     return (
       <div className="work-grid">
         <div className="stat-row">
           <article className="stat"><span>Classes</span><strong>{home.grades.length}</strong></article>
-          <article className="stat"><span>Sections with a file</span><strong>{withFiles}</strong></article>
-          <article className="stat"><span>Notices</span><strong>{home.notices.length}</strong></article>
+          <article className="stat"><span>Notices</span><strong>{schoolNotices(home.notices).length}</strong></article>
         </div>
         <section className="card span-2">
           <h3>Classes</h3>
@@ -447,21 +580,17 @@ export function AdminHome({ home, token, onChanged, pane }: { home: Home; token:
       </div>
     );
   }
-  if (pane === "classes") {
-    return (
-      <section className="card">
-        <h3>Classes</h3>
-        {home.grades.map((grade) => (
-          <GradeDetails key={grade.gradeId} grade={grade} />
-        ))}
-      </section>
-    );
-  }
+  if (pane === "classes") return <AssignDesk home={home} token={token} onChanged={onChanged} />;
   if (pane === "papers") {
     return (
       <div className="stack">
-        <PaperList papers={home.classPapers} token={token} />
         <ClassPaperForm grades={grades} token={token} onChanged={onChanged} />
+        <PaperList
+          papers={home.classPapers}
+          token={token}
+          canDelete={() => true}
+          onDelete={(id) => removePaper(token, id, onChanged)}
+        />
       </div>
     );
   }
@@ -470,30 +599,62 @@ export function AdminHome({ home, token, onChanged, pane }: { home: Home; token:
       <div className="stack">
         <NoticeComposer home={home} token={token} onChanged={onChanged} />
         <NoticeList
-          notices={home.notices}
+          notices={schoolNotices(home.notices)}
           showReceipts
-          canDelete={(notice) => notice.scope !== "CITY"}
+          canDelete={() => true}
           onDelete={(id) => removeNotice(token, id, onChanged)}
         />
       </div>
     );
   }
-  if (pane === "city") return <CityBoard items={home.cityNews} />;
+  if (pane === "city") {
+    return (
+      <CityBoard
+        notices={cityNotices(home.notices)}
+        showReceipts
+        canDelete={(notice) => notice.authorId === home.user.id}
+        onDelete={(id) => removeNotice(token, id, onChanged)}
+      />
+    );
+  }
   return null;
 }
 
 function GradeDetails({ grade }: { grade: GradeBlock }) {
-  const active = grade.sections.some((section) => section.teachers.length > 0 || section.studentCount > 0);
   return (
-    <details open={active}>
+    <details>
       <summary>Class {grade.level}</summary>
-      {grade.sections.map((section) => (
-        <div className="section-line" key={section.sectionId}>
-          <strong>{section.name}</strong>
-          <span>{section.teachers.length ? section.teachers.join(", ") : "No teacher yet"}{section.studentCount ? ` · ${section.studentCount} ${section.studentCount === 1 ? "student" : "students"}` : ""}</span>
-          <span className="muted">{section.filesToday ? `${section.filesToday} PDF` : "Nothing shared"}</span>
-        </div>
-      ))}
+      {grade.sections.map((section) => {
+        const students = section.studentCount;
+        const uploads = section.uploads ?? [];
+        const files = uploads.length;
+        return (
+          <div className="section-line" key={section.sectionId}>
+            <strong>{section.name}</strong>
+            <span>
+              {section.classTeacherName || "No class teacher"}
+              {" · "}
+              <span className="tip">
+                Teachers
+                <span className="tip-box">
+                  {section.duties?.length
+                    ? section.duties.map((duty) => <span key={duty.id}>{duty.teacherName} · {duty.subject}</span>)
+                    : <span>No subject teacher yet</span>}
+                </span>
+              </span>
+              {` · ${students} ${students === 1 ? "student" : "students"}`}
+            </span>
+            <span className="tip end">
+              {files === 1 ? "1 file uploaded today" : `${files} files uploaded today`}
+              <span className="tip-box">
+                {uploads.length
+                  ? uploads.map((file, index) => <span key={`${file.subject}-${file.teacherName}-${index}`}>{file.subject} · {file.teacherName}</span>)
+                  : <span>No files yet</span>}
+              </span>
+            </span>
+          </div>
+        );
+      })}
     </details>
   );
 }
@@ -534,6 +695,7 @@ function NoticeComposer({ home, token, onChanged }: { home: Home; token: string;
           <option value="SECTION">One section</option>
           <option value="GRADE">One class, every section</option>
           <option value="SCHOOL">Whole school</option>
+          <option value="CITY">All schools</option>
         </select>
       </label>
       {scope === "SECTION" ? (
@@ -682,17 +844,30 @@ export function PlatformHome({ home, token, onChanged, pane }: { home: Home; tok
     return (
       <div className="stack">
         {eventForm}
-        <NoticeList
-          notices={home.notices}
-          showReceipts
-          canDelete={(notice) => notice.scope === "CITY"}
-          onDelete={(id) => removeNotice(token, id, onChanged)}
-        />
       </div>
     );
   }
-  if (pane === "city") return <CityBoard items={home.cityNews} />;
+  if (pane === "city") {
+    return (
+      <CityBoard
+        notices={cityNotices(home.notices)}
+        showReceipts
+        canDelete={() => true}
+        onDelete={(id) => removeNotice(token, id, onChanged)}
+      />
+    );
+  }
   return null;
+}
+
+async function removePaper(token: string, id: number, onChanged: () => void) {
+  if (!window.confirm("Delete this sample paper? It will disappear for that class.")) return;
+  try {
+    await deletePaper(token, id);
+    onChanged();
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : "Could not delete this paper.");
+  }
 }
 
 async function removeNotice(token: string, id: number, onChanged: () => void) {
@@ -705,13 +880,24 @@ async function removeNotice(token: string, id: number, onChanged: () => void) {
   }
 }
 
+function seenCount(count: number) {
+  if (count < 1000) return String(count);
+  const thousands = count / 1000;
+  const rounded = thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10;
+  return String(rounded).replace(/\.0$/, "") + "K";
+}
+
 function NoticeList({
   notices,
+  title = "Notices",
+  empty = "No notices today.",
   showReceipts = false,
   canDelete,
   onDelete,
 }: {
   notices: Notice[];
+  title?: string;
+  empty?: string;
   showReceipts?: boolean;
   canDelete?: (notice: Notice) => boolean;
   onDelete?: (id: number) => void;
@@ -719,21 +905,21 @@ function NoticeList({
   if (notices.length === 0) {
     return (
       <section className="card">
-        <h3>Notices</h3>
-        <p className="muted">No notices today.</p>
+        <h3>{title}</h3>
+        <p className="muted">{empty}</p>
       </section>
     );
   }
   return (
     <section className="card stack">
-      <h3>Notices</h3>
+      <h3>{title}</h3>
       {notices.map((notice) => (
         <article key={notice.id}>
           <strong>{notice.title}</strong>
-          <div className="tiny muted">{notice.targetLabel} · {notice.scope === "FEE" ? "Fee reminder" : notice.scope}</div>
+          <div className="tiny muted">{notice.scope === "CITY" ? notice.targetLabel : `${notice.targetLabel} · ${notice.scope === "FEE" ? "Fee reminder" : notice.scope}`}</div>
           <p>{notice.body}</p>
           {showReceipts && notice.audienceCount !== null ? (
-            <p className="tiny muted">Seen by {notice.seenCount} of {notice.audienceCount} students and parents</p>
+            <p className="tiny muted">{notice.scope === "CITY" ? `Seen by ${seenCount(notice.seenCount ?? 0)}` : `Seen by ${notice.seenCount} of ${notice.audienceCount} students and parents`}</p>
           ) : null}
           {canDelete?.(notice) && onDelete ? (
             <button className="textish" type="button" onClick={() => onDelete(notice.id)}>Delete</button>
@@ -1052,18 +1238,25 @@ export function LaterDesk({ title }: { title: string }) {
   );
 }
 
-function CityBoard({ items }: { items: NewsItem[] }) {
+function CityBoard({
+  notices = [],
+  showReceipts = false,
+  canDelete,
+  onDelete,
+}: {
+  notices?: Notice[];
+  showReceipts?: boolean;
+  canDelete?: (notice: Notice) => boolean;
+  onDelete?: (id: number) => void;
+}) {
   return (
-    <section className="card stack news">
-      <h3>Saharanpur, last 24 hours</h3>
-      {items.length === 0 ? <p className="muted">Nothing new in the last day.</p> : null}
-      {items.map((item) => (
-        <article key={item.id}>
-          <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.title.replace(/^Sample:\s*/i, "")}</a>
-          <div className="tiny muted">{item.sourceName} · {clock(item.publishedAt)}</div>
-          <p>{item.summary}</p>
-        </article>
-      ))}
-    </section>
+    <NoticeList
+      notices={notices}
+      title="Inter-school notices"
+      empty="No inter-school notices."
+      showReceipts={showReceipts}
+      canDelete={canDelete}
+      onDelete={onDelete}
+    />
   );
 }

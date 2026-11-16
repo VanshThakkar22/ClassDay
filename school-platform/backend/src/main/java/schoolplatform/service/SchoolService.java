@@ -3,6 +3,7 @@ package schoolplatform.service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -138,7 +139,7 @@ public class SchoolService {
       classPapers = papersForGrades(kids.stream().map(profile -> profile.getSection().getGrade().getId()).distinct().toList());
     } else if (role == Enums.Role.SCHOOL_ADMIN) {
       focus = "An empty section is a normal day. Teachers are not chased for a file.";
-      gradeBlocks = structure(user.getSchool().getId(), date);
+      gradeBlocks = structure(user.getSchool().getId());
       classPapers = papers.findByGrade_School_IdOrderByCreatedAtDesc(user.getSchool().getId()).stream()
           .limit(20)
           .map(this::paperView)
@@ -151,6 +152,13 @@ public class SchoolService {
     List<Dto.NoticeView> noticeViews = visibleNotices(user);
     List<Dto.NewsItem> news =
         role == Enums.Role.TEACHER ? List.of() : recentNews();
+    List<Dto.Staff> teachers =
+        role == Enums.Role.SCHOOL_ADMIN
+            ? users.findBySchoolIdAndRoleIn(user.getSchool().getId(), List.of(Enums.Role.TEACHER)).stream()
+                .sorted(Comparator.comparing(UserAccount::getFullName))
+                .map(teacher -> new Dto.Staff(teacher.getId(), teacher.getFullName()))
+                .toList()
+            : List.of();
 
     return new Dto.HomeResponse(
         view(user),
@@ -163,7 +171,8 @@ public class SchoolService {
         gradeBlocks,
         schoolCards,
         news,
-        sectionLabel);
+        sectionLabel,
+        teachers);
   }
 
   @Transactional
@@ -224,6 +233,21 @@ public class SchoolService {
   }
 
   @Transactional
+  public void deletePaper(UserAccount current, Long id) {
+    UserAccount user = fresh(current);
+    ClassPaper paper = papers.findById(id).orElseThrow(() -> new IllegalArgumentException("File not found."));
+    boolean author = paper.getUploadedBy().getId().equals(user.getId());
+    boolean principal = user.getRole() == Enums.Role.SCHOOL_ADMIN
+        && user.getSchool() != null
+        && paper.getGrade().getSchool().getId().equals(user.getSchool().getId());
+    if (!author && !principal) {
+      throw new ForbiddenException("Only the teacher who sent this paper, or that school's office, can delete it.");
+    }
+    files.delete(paper.getStoredPath());
+    papers.delete(paper);
+  }
+
+  @Transactional
   public Dto.NoticeView postNotice(UserAccount current, Dto.NoticeRequest request) {
     UserAccount user = fresh(current);
     Enums.Scope scope = parseScope(request.scope());
@@ -238,8 +262,10 @@ public class SchoolService {
       throw new IllegalArgumentException("Fee reminders are sent from the Fees page.");
     }
     if (scope == Enums.Scope.CITY) {
-      if (user.getRole() != Enums.Role.PLATFORM_ADMIN) {
-        throw new ForbiddenException("City events are posted from the platform desk.");
+      if (user.getRole() == Enums.Role.SCHOOL_ADMIN) {
+        notice.setSchool(user.getSchool());
+      } else if (user.getRole() != Enums.Role.PLATFORM_ADMIN) {
+        throw new ForbiddenException("Only a school office or the city desk can write to every school.");
       }
     } else if (user.getRole() == Enums.Role.PLATFORM_ADMIN) {
       throw new ForbiddenException("School notices stay inside that school.");
@@ -273,11 +299,13 @@ public class SchoolService {
         throw new ForbiddenException("The city desk can delete a city notice only.");
       }
     } else if (user.getRole() == Enums.Role.SCHOOL_ADMIN) {
-      if (notice.getScope() == Enums.Scope.CITY
-          || notice.getSchool() == null
-          || user.getSchool() == null
-          || !user.getSchool().getId().equals(notice.getSchool().getId())) {
-        throw new ForbiddenException("The school office can delete a notice from this school only.");
+      boolean ownCity = notice.getScope() == Enums.Scope.CITY && notice.getAuthor().getId().equals(user.getId());
+      boolean ownSchool = notice.getScope() != Enums.Scope.CITY
+          && notice.getSchool() != null
+          && user.getSchool() != null
+          && user.getSchool().getId().equals(notice.getSchool().getId());
+      if (!ownCity && !ownSchool) {
+        throw new ForbiddenException("You can delete a notice from your school, or an all-schools notice you sent.");
       }
     } else {
       throw new ForbiddenException("Only the school office or the city desk can delete a notice.");
@@ -473,22 +501,89 @@ public class SchoolService {
     return result;
   }
 
-  private List<Dto.GradeBlock> structure(Long schoolId, LocalDate date) {
+  @Transactional
+  public void assignTeacher(UserAccount current, Dto.AssignRequest request) {
+    UserAccount user = fresh(current);
+    if (user.getRole() != Enums.Role.SCHOOL_ADMIN) {
+      throw new ForbiddenException("Only the school office assigns teachers.");
+    }
+    Section section = sections.findById(request.sectionId()).orElseThrow(() -> new IllegalArgumentException("Section not found."));
+    sameSchool(user, section.getGrade().getSchool());
+    UserAccount teacher = users.findById(request.teacherId()).orElseThrow(() -> new IllegalArgumentException("Teacher not found."));
+    if (teacher.getRole() != Enums.Role.TEACHER || teacher.getSchool() == null || !teacher.getSchool().getId().equals(user.getSchool().getId())) {
+      throw new IllegalArgumentException("Choose a teacher from this school.");
+    }
+    String subject = limit(required(request.subject(), "Subject"), 40, "Subject");
+    boolean already =
+        assignments.findByTeacherId(teacher.getId()).stream()
+            .anyMatch(item -> item.getSection().getId().equals(section.getId()) && item.getSubject().equals(subject));
+    if (!already) {
+      TeacherAssignment assignment = new TeacherAssignment();
+      assignment.setTeacher(teacher);
+      assignment.setSection(section);
+      assignment.setSubject(subject);
+      assignments.save(assignment);
+    }
+    if (request.classTeacher()) {
+      sections.findByClassTeacher_Id(teacher.getId()).stream()
+          .filter(other -> !other.getId().equals(section.getId()))
+          .findFirst()
+          .ifPresent(other -> {
+            throw new IllegalArgumentException("Already a class teacher of " + classLabel(other) + ".");
+          });
+      section.setClassTeacher(teacher);
+    } else if (section.getClassTeacher() != null && section.getClassTeacher().getId().equals(teacher.getId())) {
+      section.setClassTeacher(null);
+    }
+    sections.save(section);
+  }
+
+  @Transactional
+  public void removeAssignment(UserAccount current, Long id) {
+    UserAccount user = fresh(current);
+    if (user.getRole() != Enums.Role.SCHOOL_ADMIN) {
+      throw new ForbiddenException("Only the school office assigns teachers.");
+    }
+    TeacherAssignment assignment = assignments.findById(id).orElseThrow(() -> new IllegalArgumentException("Assignment not found."));
+    sameSchool(user, assignment.getSection().getGrade().getSchool());
+    assignments.delete(assignment);
+  }
+
+  private List<Dto.GradeBlock> structure(Long schoolId) {
+    ZonedDateTime now = ZonedDateTime.now(ZONE);
+    ZonedDateTime start = now.toLocalDate().atTime(8, 0).atZone(ZONE);
+    if (now.isBefore(start)) {
+      start = start.minusDays(1);
+    }
+    Instant from = start.toInstant();
+    Instant until = start.plusDays(1).toInstant();
     List<Dto.GradeBlock> blocks = new ArrayList<>();
     for (Grade grade : grades.findBySchoolIdOrderByLevelAsc(schoolId)) {
       List<Dto.SectionLine> lines = new ArrayList<>();
       for (Section section : sections.findByGradeIdOrderByNameAsc(grade.getId())) {
         List<String> teacherNames = new ArrayList<>();
-        if (section.getClassTeacher() != null) {
-          teacherNames.add(section.getClassTeacher().getFullName() + " · Class teacher");
+        String classTeacherName = section.getClassTeacher() == null ? "" : section.getClassTeacher().getFullName();
+        if (!classTeacherName.isEmpty()) {
+          teacherNames.add(classTeacherName);
         }
-        assignments.findBySectionId(section.getId()).stream()
-            .map(item -> item.getTeacher().getFullName() + " · " + item.getSubject())
-            .sorted()
-            .forEach(teacherNames::add);
-        int filesToday = dailyWork.findBySectionIdAndWorkDateOrderBySubjectAsc(section.getId(), date).size();
+        List<Dto.Duty> duties =
+            assignments.findBySectionId(section.getId()).stream()
+                .sorted(Comparator.comparing((TeacherAssignment item) -> item.getTeacher().getFullName()).thenComparing(TeacherAssignment::getSubject))
+                .map(item -> {
+                  teacherNames.add(item.getTeacher().getFullName() + " · " + item.getSubject());
+                  return new Dto.Duty(item.getId(), item.getTeacher().getId(), item.getTeacher().getFullName(), item.getSubject());
+                })
+                .toList();
+        List<Dto.UploadLine> uploads =
+            dailyWork
+                .findBySectionIdAndUploadedAtGreaterThanEqualAndUploadedAtLessThanOrderBySubjectAsc(section.getId(), from, until)
+                .stream()
+                .map(item -> new Dto.UploadLine(item.getSubject(), item.getTeacher().getFullName()))
+                .toList();
         int studentCount = students.findBySectionId(section.getId()).size();
-        lines.add(new Dto.SectionLine(section.getId(), section.getName(), teacherNames, filesToday, studentCount));
+        Long classTeacherId = section.getClassTeacher() == null ? null : section.getClassTeacher().getId();
+        lines.add(new Dto.SectionLine(
+            section.getId(), section.getName(), teacherNames, uploads.size(), studentCount, classTeacherId, duties, classTeacherName, uploads));
       }
       blocks.add(new Dto.GradeBlock(grade.getId(), grade.getLevel(), lines));
     }
@@ -511,7 +606,11 @@ public class SchoolService {
       if (!canSee(user, notice)) {
         continue;
       }
-      if (user.getRole() == Enums.Role.PARENT || user.getRole() == Enums.Role.STUDENT) {
+      if (notice.getScope() == Enums.Scope.CITY) {
+        if (user.getRole() != Enums.Role.PLATFORM_ADMIN) {
+          markSeen(notice, user);
+        }
+      } else if (user.getRole() == Enums.Role.PARENT || user.getRole() == Enums.Role.STUDENT) {
         markSeen(notice, user);
       }
       views.add(noticeView(notice, user));
@@ -661,7 +760,7 @@ public class SchoolService {
       return 1 + guardians.findByStudentIdIn(List.of(notice.getStudent().getId())).size();
     }
     if (notice.getScope() == Enums.Scope.CITY) {
-      return users.findByRoleIn(List.of(Enums.Role.PARENT, Enums.Role.STUDENT)).size();
+      return users.findByRoleIn(List.of(Enums.Role.SCHOOL_ADMIN, Enums.Role.TEACHER, Enums.Role.PARENT, Enums.Role.STUDENT)).size();
     }
     if (notice.getScope() == Enums.Scope.SCHOOL) {
       return users.findBySchoolIdAndRoleIn(notice.getSchool().getId(), List.of(Enums.Role.PARENT, Enums.Role.STUDENT)).size();
@@ -680,7 +779,10 @@ public class SchoolService {
   private Dto.NoticeView noticeView(Notice notice, UserAccount viewer) {
     Integer seen = null;
     Integer audience = null;
-    if (viewer.getRole() == Enums.Role.SCHOOL_ADMIN || viewer.getRole() == Enums.Role.PLATFORM_ADMIN) {
+    boolean showCount = notice.getScope() == Enums.Scope.CITY
+        ? viewer.getRole() == Enums.Role.PLATFORM_ADMIN || notice.getAuthor().getId().equals(viewer.getId())
+        : viewer.getRole() == Enums.Role.SCHOOL_ADMIN || viewer.getRole() == Enums.Role.PLATFORM_ADMIN;
+    if (showCount) {
       seen = (int) receipts.countByNoticeId(notice.getId());
       audience = audienceCount(notice);
     }
@@ -692,7 +794,8 @@ public class SchoolService {
         targetLabel(notice),
         notice.getCreatedAt().toString(),
         seen,
-        audience);
+        audience,
+        notice.getAuthor().getId());
   }
 
   private String targetLabel(Notice notice) {
@@ -700,7 +803,7 @@ public class SchoolService {
       return notice.getStudent().getFullName();
     }
     if (notice.getScope() == Enums.Scope.CITY) {
-      return "All schools in " + CITY;
+      return notice.getSchool() == null ? "All schools in " + CITY : "All schools · " + notice.getSchool().getName();
     }
     if (notice.getScope() == Enums.Scope.SCHOOL) {
       return notice.getSchool().getName();
@@ -728,7 +831,8 @@ public class SchoolService {
         paper.getOriginalFileName(),
         "Class " + paper.getGrade().getLevel(),
         paper.getUploadedBy().getFullName(),
-        paper.getCreatedAt().toString());
+        paper.getCreatedAt().toString(),
+        paper.getUploadedBy().getId());
   }
 
   private Dto.NewsItem newsView(CityNews item) {

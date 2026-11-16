@@ -67,6 +67,21 @@ public class ApiController {
     return schoolService.uploadPaper(CurrentUser.require(authentication), gradeId, title, file);
   }
 
+  @DeleteMapping("/class-papers/{id}")
+  void deletePaper(Authentication authentication, @PathVariable Long id) {
+    schoolService.deletePaper(CurrentUser.require(authentication), id);
+  }
+
+  @PostMapping("/assignments")
+  void assignTeacher(Authentication authentication, @RequestBody Dto.AssignRequest request) {
+    schoolService.assignTeacher(CurrentUser.require(authentication), request);
+  }
+
+  @DeleteMapping("/assignments/{id}")
+  void removeAssignment(Authentication authentication, @PathVariable Long id) {
+    schoolService.removeAssignment(CurrentUser.require(authentication), id);
+  }
+
   @PostMapping("/notices")
   Dto.NoticeView postNotice(Authentication authentication, @RequestBody Dto.NoticeRequest request) {
     return schoolService.postNotice(CurrentUser.require(authentication), request);

@@ -33,6 +33,7 @@ export type PaperFile = {
   classLabel: string;
   uploadedBy: string;
   createdAt: string;
+  uploadedById: number;
 };
 
 export type Notice = {
@@ -44,6 +45,14 @@ export type Notice = {
   createdAt: string;
   seenCount: number | null;
   audienceCount: number | null;
+  authorId: number;
+};
+
+export type Duty = {
+  id: number;
+  teacherId: number;
+  teacherName: string;
+  subject: string;
 };
 
 export type SectionLine = {
@@ -52,6 +61,15 @@ export type SectionLine = {
   teachers: string[];
   filesToday: number;
   studentCount: number;
+  classTeacherId: number | null;
+  duties: Duty[];
+  classTeacherName: string;
+  uploads: { subject: string; teacherName: string }[];
+};
+
+export type Staff = {
+  id: number;
+  fullName: string;
 };
 
 export type GradeBlock = {
@@ -106,6 +124,7 @@ export type Home = {
   schools: SchoolCard[];
   cityNews: NewsItem[];
   sectionLabel: string;
+  teachers: Staff[];
 };
 
 async function readError(response: Response): Promise<string> {
@@ -170,8 +189,36 @@ export async function uploadPaper(token: string, gradeId: number, title: string,
   if (!response.ok) throw new Error(await readError(response));
 }
 
+export async function deletePaper(token: string, id: number): Promise<void> {
+  const response = await fetch(`/api/class-papers/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}
+
 export async function deleteNotice(token: string, id: number): Promise<void> {
   const response = await fetch(`/api/notices/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}
+
+export async function assignTeacher(
+  token: string,
+  payload: { sectionId: number; teacherId: number; subject: string; classTeacher: boolean },
+): Promise<void> {
+  const response = await fetch("/api/assignments", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}
+
+export async function removeAssignment(token: string, id: number): Promise<void> {
+  const response = await fetch(`/api/assignments/${id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });

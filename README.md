@@ -1,54 +1,70 @@
-# Openbell
+# ClassDay
 
-A school diary for Saharanpur. Teachers send the day’s sheet, or nothing. Absent students catch up without a night of messages. Two fictional schools share one product, and each school’s families stay private.
+A school diary for Saharanpur. Two fictional schools, Rainbow and Pinewood, share one product. Each school’s students stay private. Classes run from 1 to 12, with sections A to E.
 
-This is a prototype. Fees, attendance, exams, transport, timetable, and library are buttons on **Later**. They are not built yet.
+A teacher uploads one PDF for a section and subject, or uploads nothing when the day was quiet. A sample paper is sent once to a class, so every section of that class can open it. The school office assigns who teaches which subject, and which one section that teacher is class teacher of. Pending fees are entered by that class teacher. Notices inside a school stay on Notices. A notice sent to every school appears on City.
 
-## Run it
+Attendance and exams are still buttons only. They are not built yet.
 
-Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then from this folder:
+## Start the services
 
-```bash
-docker compose up --build
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), Java 17, Maven, and Node.js. Then start the three pieces in this order, each in its own terminal. The API needs MySQL, and the screens need the API.
+
+1. Database, from `school-platform`:
+
+```powershell
+docker compose up -d
 ```
 
-The first build takes a few minutes. Then open http://localhost:3000
+MySQL 8 listens on port 3307. Wait until the container is healthy before the next step. Check with `docker compose ps`.
 
-On another laptop: install Docker Desktop, copy or clone this folder, and run the same command. You do not need Java, Python, or Node installed on that machine.
+2. API, from `school-platform/backend`:
 
-Stop it with Ctrl+C, then `docker compose down`. To wipe the demo and start clean:
-
-```bash
-docker compose down -v
+```powershell
+mvn spring-boot:run
 ```
+
+The API listens on port 8080. The first start creates the demo schools and accounts.
+
+3. Screens, from `school-platform/web`:
+
+```powershell
+npm install
+npm run dev
+```
+
+`npm install` is only needed the first time. Open http://localhost:5173
+
+Stop the API and the screens with Ctrl+C. Stop MySQL with `docker compose down` from `school-platform`. Adding `-v` also deletes the database.
 
 ## Sign in
 
-Every demo password is `openbell`.
+Every demo password is `demo1234`.
 
-| Person | Email | What you should see |
-|---|---|---|
-| Meera Sharma | meera@northline.school | Maths sent today for Class 8 A and 8 B. Arjun has sent nothing, and that is allowed. |
-| Arjun Malhotra | arjun@northline.school | English teacher on 8 A. Yesterday’s sheet is on the diary, not forced onto today. |
-| Aman Sharma | aman@northline.school | Student. Today shows Meera’s PDF. Yesterday shows Maths and English. |
-| Leela Sharma | leela@northline.school | Aman’s mother. Same diary. Opening it marks the school notes as seen. |
-| Sana Siddiqui | sana@northline.school | Office. Classes 1–12, five sections each. Notes to a section, a class, or the school. |
-| Kabir Qureshi | kabir@riverbend.school | The second school. Hindi for Class 5 C. |
-| City desk | desk@openbell.school | Both schools, plus a Saharanpur event. |
-
-Also in the login list: Riya (Class 10 sample paper for every section), Neel and Pooja, Nabil, Harish, Isha, and Farah.
-
-The schools are invented. They are not the real schools of Saharanpur.
-
-## What is running
-
-| Piece | Role |
+| Desk | Email |
 |---|---|
-| Web | The screens, on port 3000 |
-| Java API | Schools, logins, sheets, notes. Port 8080 |
-| Python | Keeps the sample city items inside the last 24 hours |
-| MySQL 8 | The database, on port 3306 |
+| Mathematics, Class 8-A and 8-B | meera.sharma@classday.local |
+| English, Class 8-A | arjun.verma@classday.local |
+| Student in Class 8-A | aarav@classday.local |
+| That student's parent | parent.aarav@classday.local |
+| Rainbow School office | admin.rainbow@classday.local |
+| Pinewood School office | admin.pinewood@classday.local |
+| Science, Pinewood Class 10-A | neha.kapoor@classday.local |
+| Student in Pinewood Class 10-A | diya@classday.local |
+| City desk | platform@classday.local |
 
-School dates use Asia/Kolkata. PDFs live in a Docker volume, and MySQL only stores the path.
+Each section also has a class teacher. The id is `Teacher`, then `C`, the class, `S`, and the section, at `Rainbow` or `Pinewood`. Class 8-A at Rainbow is `TeacherC8SA@Rainbow`. The password is the same.
 
-The city lines are samples, marked on the page. A newspaper you are allowed to use can replace them later in `ingest/keep_fresh.py`. The screen stays the same.
+Meera’s mathematics PDF for today is already there. Arjun’s English slot is empty, which is a valid day. Class 8 and Pinewood Class 10 each have one sample paper.
+
+## City headlines
+
+After the API is running, a sample Saharanpur headline can be added from Python:
+
+```powershell
+cd school-platform/news-ingest
+python -m pip install -r requirements.txt
+python ingest_city_news.py
+```
+
+The script stores a headline, source, link, and one-line summary. It does not copy a newspaper article. Headlines from the last 24 hours show in the sidebar.
