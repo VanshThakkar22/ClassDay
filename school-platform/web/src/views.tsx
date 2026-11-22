@@ -939,7 +939,7 @@ export function NewsRail({ items }: { items: NewsItem[] }) {
       {items.map((item) => (
         <article className="headline" key={item.id}>
           <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.title.replace(/^Sample:\s*/i, "")}</a>
-          <span className="tiny muted">{item.sourceName} · {clock(item.publishedAt)}</span>
+          <span className="tiny muted">{item.scope} · {item.sourceName} · {clock(item.publishedAt)}</span>
         </article>
       ))}
     </aside>

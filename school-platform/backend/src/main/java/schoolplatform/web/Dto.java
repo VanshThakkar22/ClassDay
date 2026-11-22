@@ -77,7 +77,7 @@ public final class Dto {
   public record SchoolCard(Long id, String name, String plan, int classes, int sections) {}
 
   public record NewsItem(
-      Long id, String title, String sourceName, String sourceUrl, String summary, String publishedAt) {}
+      Long id, String title, String sourceName, String sourceUrl, String summary, String publishedAt, String scope) {}
 
   public record NoticeRequest(String scope, Long sectionId, Long gradeId, String title, String body) {}
 
@@ -102,5 +102,6 @@ public final class Dto {
       String sourceName,
       String sourceUrl,
       String summary,
-      Instant publishedAt) {}
+      Instant publishedAt,
+      String scope) {}
 }

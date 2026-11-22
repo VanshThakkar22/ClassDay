@@ -93,6 +93,7 @@ export type NewsItem = {
   sourceUrl: string;
   summary: string;
   publishedAt: string;
+  scope: string;
 };
 
 export type FeeLine = {

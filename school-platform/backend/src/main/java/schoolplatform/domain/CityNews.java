@@ -27,6 +27,16 @@ public class CityNews {
 
   private Instant publishedAt;
 
+  private String scope;
+
+  public String getScope() {
+    return scope;
+  }
+
+  public void setScope(String scope) {
+    this.scope = scope;
+  }
+
   public Long getId() {
     return id;
   }

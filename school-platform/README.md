@@ -59,12 +59,13 @@ Meera’s mathematics PDF for today is already there. Arjun’s English slot is 
 
 ## City headlines
 
-After the API is running, a sample Saharanpur headline can be added from Python:
+After the API is running, start the Saharanpur news script in its own terminal. It needs only Python, no packages:
 
 ```powershell
 cd news-ingest
-python -m pip install -r requirements.txt
-python ingest_city_news.py
+python city_api.py --watch
 ```
 
-The script stores a headline, source, link, and one-line summary. It does not copy a newspaper article. Headlines from the last 24 hours show in the sidebar.
+It reads Saharanpur headlines every 15 minutes from Google News and the RSS feeds of Hindustan Times, Times of India, NDTV and Amar Ujala. It shows 10 headlines at most: up to 8 about Saharanpur and 2 national from Hindustan Times, with national headlines filling in if there are fewer than 8 local ones. It posts only the ones from the last 24 hours. The newest is first in the sidebar. The API refuses anything older than a day and deletes headlines once they pass 24 hours. The script stores a headline, source, link, and one-line summary. It does not copy a newspaper article. The page refreshes every 5 minutes.
+
+`python city_api.py --push` posts once and stops.

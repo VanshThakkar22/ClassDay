@@ -92,6 +92,12 @@ export default function App() {
     };
   }, [token, date, revision]);
 
+  useEffect(() => {
+    if (!token) return;
+    const timer = window.setInterval(() => setRevision((value) => value + 1), 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [token]);
+
   if (!token) {
     return (
       <main className="gate-page">

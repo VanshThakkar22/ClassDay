@@ -9,4 +9,6 @@ public interface CityNewsRepository extends JpaRepository<CityNews, Long> {
   List<CityNews> findByCityAndPublishedAtAfterOrderByPublishedAtDesc(String city, Instant after);
 
   boolean existsByCityAndTitle(String city, String title);
+
+  long deleteByPublishedAtBefore(Instant before);
 }

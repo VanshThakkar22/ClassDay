@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.core.io.Resource;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -150,8 +151,7 @@ public class SchoolService {
     }
 
     List<Dto.NoticeView> noticeViews = visibleNotices(user);
-    List<Dto.NewsItem> news =
-        role == Enums.Role.TEACHER ? List.of() : recentNews();
+    List<Dto.NewsItem> news = recentNews();
     List<Dto.Staff> teachers =
         role == Enums.Role.SCHOOL_ADMIN
             ? users.findBySchoolIdAndRoleIn(user.getSchool().getId(), List.of(Enums.Role.TEACHER)).stream()
@@ -406,12 +406,18 @@ public class SchoolService {
     }
     String city = request.city() == null || request.city().isBlank() ? CITY : request.city().trim();
     String title = required(request.title(), "Title");
+    Instant now = Instant.now();
+    Instant published = request.publishedAt() == null || request.publishedAt().isAfter(now) ? now : request.publishedAt();
+    if (published.isBefore(now.minus(24, ChronoUnit.HOURS))) {
+      throw new IllegalArgumentException("Only news from the last 24 hours is accepted.");
+    }
     if (cityNews.existsByCityAndTitle(city, title)) {
       CityNews existing =
           cityNews.findByCityAndPublishedAtAfterOrderByPublishedAtDesc(city, Instant.EPOCH).stream()
               .filter(item -> item.getTitle().equals(title))
               .findFirst()
               .orElseThrow();
+      existing.setScope("National".equals(request.scope()) ? "National" : "City");
       return newsView(existing);
     }
     CityNews item = new CityNews();
@@ -420,8 +426,15 @@ public class SchoolService {
     item.setSourceName(required(request.sourceName(), "Source"));
     item.setSourceUrl(request.sourceUrl() == null ? "" : request.sourceUrl().trim());
     item.setSummary(limit(request.summary() == null ? "" : request.summary().trim(), 500, "Summary"));
-    item.setPublishedAt(request.publishedAt() == null ? Instant.now() : request.publishedAt());
+    item.setPublishedAt(published);
+    item.setScope("National".equals(request.scope()) ? "National" : "City");
     return newsView(cityNews.save(item));
+  }
+
+  @Scheduled(fixedDelay = 10 * 60 * 1000)
+  @Transactional
+  public void dropOldNews() {
+    cityNews.deleteByPublishedAtBefore(Instant.now().minus(24, ChronoUnit.HOURS));
   }
 
   @Transactional(readOnly = true)
@@ -749,8 +762,19 @@ public class SchoolService {
 
   private List<Dto.NewsItem> recentNews() {
     Instant after = Instant.now().minus(24, ChronoUnit.HOURS);
-    return cityNews.findByCityAndPublishedAtAfterOrderByPublishedAtDesc(CITY, after).stream()
-        .limit(20)
+    List<CityNews> all = cityNews.findByCityAndPublishedAtAfterOrderByPublishedAtDesc(CITY, after);
+    List<CityNews> local = all.stream().filter(item -> !"National".equals(item.getScope())).toList();
+    List<CityNews> national = all.stream().filter(item -> "National".equals(item.getScope())).toList();
+    List<CityNews> picked = new ArrayList<>();
+    if (local.size() >= 8) {
+      picked.addAll(local.subList(0, 8));
+      picked.addAll(national.subList(0, Math.min(2, national.size())));
+    } else {
+      picked.addAll(local);
+      picked.addAll(national.subList(0, Math.min(10 - local.size(), national.size())));
+    }
+    return picked.stream()
+        .sorted(Comparator.comparing(CityNews::getPublishedAt, Comparator.reverseOrder()))
         .map(this::newsView)
         .toList();
   }
@@ -842,7 +866,8 @@ public class SchoolService {
         item.getSourceName(),
         item.getSourceUrl(),
         item.getSummary(),
-        item.getPublishedAt().toString());
+        item.getPublishedAt().toString(),
+        item.getScope() == null ? "City" : item.getScope());
   }
 
   private Dto.UserView view(UserAccount user) {

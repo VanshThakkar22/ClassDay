@@ -2,7 +2,6 @@ package schoolplatform.config;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -12,7 +11,6 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import schoolplatform.domain.CityNews;
 import schoolplatform.domain.ClassPaper;
 import schoolplatform.domain.DailyWork;
 import schoolplatform.domain.Enums;
@@ -24,7 +22,6 @@ import schoolplatform.domain.Section;
 import schoolplatform.domain.StudentProfile;
 import schoolplatform.domain.TeacherAssignment;
 import schoolplatform.domain.UserAccount;
-import schoolplatform.repo.CityNewsRepository;
 import schoolplatform.repo.ClassPaperRepository;
 import schoolplatform.repo.DailyWorkRepository;
 import schoolplatform.repo.GradeRepository;
@@ -51,7 +48,6 @@ public class DataSeeder implements ApplicationRunner {
   private final DailyWorkRepository dailyWork;
   private final ClassPaperRepository papers;
   private final NoticeRepository notices;
-  private final CityNewsRepository cityNews;
   private final FileStorageService files;
   private final PasswordEncoder passwords;
 
@@ -66,7 +62,6 @@ public class DataSeeder implements ApplicationRunner {
       DailyWorkRepository dailyWork,
       ClassPaperRepository papers,
       NoticeRepository notices,
-      CityNewsRepository cityNews,
       FileStorageService files,
       PasswordEncoder passwords) {
     this.users = users;
@@ -79,7 +74,6 @@ public class DataSeeder implements ApplicationRunner {
     this.dailyWork = dailyWork;
     this.papers = papers;
     this.notices = notices;
-    this.cityNews = cityNews;
     this.files = files;
     this.passwords = passwords;
   }
@@ -181,10 +175,6 @@ public class DataSeeder implements ApplicationRunner {
     cityEvent.setBody("One team per school. Names can be sent to the school office. This is a city event, not a class circular.");
     cityEvent.setCreatedAt(Instant.now());
     notices.save(cityEvent);
-
-    news("Sample: city science fair entries are open", Instant.now().minus(2, ChronoUnit.HOURS));
-    news("Sample: district athletics list goes up this week", Instant.now().minus(8, ChronoUnit.HOURS));
-    news("Old item that should stay off the 24 hour board", Instant.now().minus(36, ChronoUnit.HOURS));
   }
 
   private void seedRoster() {
@@ -268,17 +258,6 @@ public class DataSeeder implements ApplicationRunner {
     paper.setStoredPath(files.storeBytes(filename, SimplePdf.text(line)));
     paper.setCreatedAt(Instant.now());
     papers.save(paper);
-  }
-
-  private void news(String title, Instant publishedAt) {
-    CityNews item = new CityNews();
-    item.setCity(SchoolService.CITY);
-    item.setTitle(title);
-    item.setSourceName("Demo wire");
-    item.setSourceUrl("https://example.com/saharanpur");
-    item.setSummary("Placeholder until a licensed Saharanpur news feed is connected. The article itself stays on the source site.");
-    item.setPublishedAt(publishedAt);
-    cityNews.save(item);
   }
 
   private static String key(School school, int level) {
