@@ -128,6 +128,12 @@ export type Home = {
   teachers: Staff[];
 };
 
+const API = String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
+function api(path: string): string {
+  return `${API}${path}`;
+}
+
 async function readError(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as { error?: string };
@@ -138,7 +144,7 @@ async function readError(response: Response): Promise<string> {
 }
 
 export async function login(email: string, password: string): Promise<{ token: string; user: User }> {
-  const response = await fetch("/api/auth/login", {
+  const response = await fetch(api("/api/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -148,7 +154,7 @@ export async function login(email: string, password: string): Promise<{ token: s
 }
 
 export async function loadHome(token: string, date: string): Promise<Home> {
-  const response = await fetch(`/api/home?date=${date}`, {
+  const response = await fetch(api(`/api/home?date=${date}`), {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw new Error(await readError(response));
@@ -169,7 +175,7 @@ export async function uploadDaily(
   body.set("note", note);
   body.set("workDate", workDate);
   body.set("file", file);
-  const response = await fetch("/api/daily-work", {
+  const response = await fetch(api("/api/daily-work"), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body,
@@ -182,7 +188,7 @@ export async function uploadPaper(token: string, gradeId: number, title: string,
   body.set("gradeId", String(gradeId));
   body.set("title", title);
   body.set("file", file);
-  const response = await fetch("/api/class-papers", {
+  const response = await fetch(api("/api/class-papers"), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body,
@@ -191,7 +197,7 @@ export async function uploadPaper(token: string, gradeId: number, title: string,
 }
 
 export async function deletePaper(token: string, id: number): Promise<void> {
-  const response = await fetch(`/api/class-papers/${id}`, {
+  const response = await fetch(api(`/api/class-papers/${id}`), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -199,7 +205,7 @@ export async function deletePaper(token: string, id: number): Promise<void> {
 }
 
 export async function deleteNotice(token: string, id: number): Promise<void> {
-  const response = await fetch(`/api/notices/${id}`, {
+  const response = await fetch(api(`/api/notices/${id}`), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -210,7 +216,7 @@ export async function assignTeacher(
   token: string,
   payload: { sectionId: number; teacherId: number; subject: string; classTeacher: boolean },
 ): Promise<void> {
-  const response = await fetch("/api/assignments", {
+  const response = await fetch(api("/api/assignments"), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -219,7 +225,7 @@ export async function assignTeacher(
 }
 
 export async function removeAssignment(token: string, id: number): Promise<void> {
-  const response = await fetch(`/api/assignments/${id}`, {
+  const response = await fetch(api(`/api/assignments/${id}`), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -230,7 +236,7 @@ export async function postNotice(
   token: string,
   payload: { scope: string; sectionId?: number; gradeId?: number; title: string; body: string },
 ): Promise<void> {
-  const response = await fetch("/api/notices", {
+  const response = await fetch(api("/api/notices"), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -239,13 +245,13 @@ export async function postNotice(
 }
 
 export async function loadFees(token: string): Promise<FeeBoard> {
-  const response = await fetch("/api/fees", { headers: { Authorization: `Bearer ${token}` } });
+  const response = await fetch(api("/api/fees"), { headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
 
 export async function saveFee(token: string, line: FeeLine): Promise<FeeLine> {
-  const response = await fetch(`/api/fees/${line.studentId}`, {
+  const response = await fetch(api(`/api/fees/${line.studentId}`), {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -260,7 +266,7 @@ export async function saveFee(token: string, line: FeeLine): Promise<FeeLine> {
 }
 
 export async function remindFees(token: string, title: string, body: string): Promise<number> {
-  const response = await fetch("/api/fees/remind", {
+  const response = await fetch(api("/api/fees/remind"), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ title, body }),
@@ -271,7 +277,7 @@ export async function remindFees(token: string, title: string, body: string): Pr
 }
 
 export async function openPdf(token: string, path: string): Promise<void> {
-  const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await fetch(api(path), { headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(await readError(response));
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);

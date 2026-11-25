@@ -47,8 +47,9 @@ public class SecurityConfig {
   @Bean
   CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration config = new CorsConfiguration();
-    config.addAllowedOrigin("http://localhost:5173");
-    config.addAllowedOrigin("http://127.0.0.1:5173");
+    config.addAllowedOriginPattern("http://localhost:5173");
+    config.addAllowedOriginPattern("http://127.0.0.1:5173");
+    config.addAllowedOriginPattern("https://*.vercel.app");
     config.addAllowedHeader("*");
     config.addAllowedMethod("*");
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
