@@ -87,6 +87,26 @@ public class DataSeeder implements ApplicationRunner {
     if (users.countByEmail("Student1C1SA@Rainbow") == 0) {
       seedRoster();
     }
+    restoreMissingFiles();
+  }
+
+  private void restoreMissingFiles() {
+    for (DailyWork work : dailyWork.findAll()) {
+      if (files.missing(work.getStoredPath())) {
+        String name = work.getOriginalFileName() == null ? "class-work.pdf" : work.getOriginalFileName();
+        String line = work.getSubject() + " for " + work.getSection().getGrade().getLevel() + work.getSection().getName();
+        work.setStoredPath(files.storeBytes(name, SimplePdf.text(line)));
+        dailyWork.save(work);
+      }
+    }
+    for (ClassPaper paper : papers.findAll()) {
+      if (files.missing(paper.getStoredPath())) {
+        String name = paper.getOriginalFileName() == null ? "sample-paper.pdf" : paper.getOriginalFileName();
+        String line = paper.getTitle() == null ? "Sample paper" : paper.getTitle();
+        paper.setStoredPath(files.storeBytes(name, SimplePdf.text(line)));
+        papers.save(paper);
+      }
+    }
   }
 
   private void seedSchools() {

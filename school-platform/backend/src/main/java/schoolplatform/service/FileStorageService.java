@@ -31,7 +31,22 @@ public class FileStorageService {
   }
 
   public Resource load(String storedPath) {
-    return new FileSystemResource(storedPath);
+    if (storedPath == null || storedPath.isBlank()) {
+      throw new IllegalArgumentException("That PDF is no longer on the server. Upload it again.");
+    }
+    Path path = Path.of(storedPath);
+    if (!Files.isRegularFile(path)) {
+      throw new IllegalArgumentException("That PDF is no longer on the server. Upload it again.");
+    }
+    return new FileSystemResource(path);
+  }
+
+  public boolean missing(String storedPath) {
+    return storedPath == null || storedPath.isBlank() || !Files.isRegularFile(Path.of(storedPath));
+  }
+
+  public Path root() {
+    return root;
   }
 
   public void delete(String storedPath) {
