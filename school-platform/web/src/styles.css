@@ -316,6 +316,26 @@ input, select, textarea {
   border-radius: 12px;
   padding: 12px 13px;
 }
+
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  padding-right: 52px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-height: 36px;
+  padding: 6px 10px;
+  color: #5b6b7c;
+  line-height: 0;
+}
 label.check input {
   width: 16px;
   height: 16px;

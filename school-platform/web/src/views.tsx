@@ -54,6 +54,7 @@ function monogram(name: string) {
 export function Login({ onSuccess }: { onSuccess: (token: string) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -88,14 +89,33 @@ export function Login({ onSuccess }: { onSuccess: (token: string) => void }) {
       </label>
       <label>
         Password
-        <input
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          autoComplete="current-password"
-          placeholder="Password"
-          required
-        />
+        <span className="password-field">
+          <input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+            placeholder="Password"
+            required
+          />
+          <button
+            className="ghost password-toggle"
+            type="button"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            onClick={() => setShowPassword((open) => !open)}
+          >
+            {showPassword ? (
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path fill="currentColor" d="M12 5c5.5 0 9.5 4.5 10.5 6-.7 1.1-4.5 6-10.5 6S2.7 12.1 2 11c1-1.5 5-6 10-6zm0 2a4 4 0 100 8 4 4 0 000-8zm0 2a2 2 0 110 4 2 2 0 010-4z" />
+                <path fill="currentColor" d="M4 4l16 16-1.4 1.4L2.6 5.4z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path fill="currentColor" d="M12 5c5.5 0 9.5 4.5 10.5 6-.7 1.1-4.5 6-10.5 6S2.7 12.1 2 11c1-1.5 5-6 10-6zm0 2a4 4 0 100 8 4 4 0 000-8zm0 2a2 2 0 110 4 2 2 0 010-4z" />
+              </svg>
+            )}
+          </button>
+        </span>
       </label>
       {error ? <p className="error">{error}</p> : null}
       <button className="solid" disabled={busy} type="submit">{busy ? "Signing in…" : "Sign in"}</button>
