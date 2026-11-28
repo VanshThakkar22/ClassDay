@@ -59,12 +59,20 @@ Meera’s mathematics PDF for today is already there. Arjun’s English slot is 
 
 ## City headlines
 
-After the API is running, a sample Saharanpur headline can be added from Python:
+Headlines are pushed into the live API by GitHub Actions every 30 minutes (workflow `City news`). Add these repository secrets on GitHub:
+
+- `CLASSDAY_API` — e.g. `https://classday.onrender.com`
+- `CLASSDAY_INGEST_KEY` — same value as Render `APP_INGEST_KEY` (default `classday-ingest-dev`)
+
+You can also run **Actions → City news → Run workflow** once by hand.
+
+For local testing only:
 
 ```powershell
 cd school-platform/news-ingest
-python -m pip install -r requirements.txt
-python ingest_city_news.py
+$env:CLASSDAY_API="https://classday.onrender.com"
+$env:CLASSDAY_INGEST_KEY="classday-ingest-dev"
+python city_api.py --push
 ```
 
-The script stores a headline, source, link, and one-line summary. It does not copy a newspaper article. Headlines from the last 24 hours show in the sidebar.
+It reads Saharanpur headlines from Google News and the RSS feeds of Hindustan Times, Times of India, NDTV and Amar Ujala. It shows 10 headlines at most: up to 8 about Saharanpur and 2 national from Hindustan Times, with national headlines filling in if there are fewer than 8 local ones. It posts only the ones from the last 24 hours. The newest is first in the sidebar. The API refuses anything older than a day and deletes headlines once they pass 24 hours. The script stores a headline, source, link, and one-line summary. It does not copy a newspaper article. The page refreshes every 5 minutes.

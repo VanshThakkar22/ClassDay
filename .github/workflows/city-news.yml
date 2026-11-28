@@ -1,0 +1,26 @@
+name: City news
+
+on:
+  schedule:
+    # Every 30 minutes. GitHub can delay free-tier cron a bit.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  push-news:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: school-platform/news-ingest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Push Saharanpur headlines
+        env:
+          CLASSDAY_API: ${{ secrets.CLASSDAY_API }}
+          CLASSDAY_INGEST_KEY: ${{ secrets.CLASSDAY_INGEST_KEY }}
+        run: python city_api.py --push
